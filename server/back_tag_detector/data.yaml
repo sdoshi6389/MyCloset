@@ -1,0 +1,13 @@
+train: ../train/images
+val: ../train/images #change to ../valid/images if you have a validation set later
+# test: ../test/images
+
+nc: 1
+names: ['back_tag']
+
+roboflow:
+  workspace: sinmaster23
+  project: back_tag_detection-xp2mo
+  version: 1
+  license: CC BY 4.0
+  url: https://universe.roboflow.com/sinmaster23/back_tag_detection-xp2mo/dataset/1

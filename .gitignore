@@ -1,0 +1,50 @@
+# Secrets
+.env
+**/.env
+server/credentials.json
+server/token.pickle
+
+# Python
+__pycache__/
+*.pyc
+myenv/
+
+# Node / frontend
+closet-app/node_modules/
+closet-app/dist/
+
+# Third-party vendored library (reinstall separately, not our code)
+GroundingDINO/
+
+# Model weights (large binaries, downloadable/regenerable)
+*.pth
+*.pt
+
+# Generated/processed pipeline outputs (regenerable)
+server/faiss_cache/
+server/processed/
+server/emoji_outputs/
+server/icon_outputs/
+server/generated_outfits/
+server/mannequin_outputs/
+server/cropped_clothing/
+server/runs/
+server/post_images/
+server/back_tag_detector/runs/
+
+# Live user-uploaded / personal data (kept locally, not versioned)
+server/uploaded_closets/
+downloaded_images/
+converted_images/
+
+# Scraper data dumps (regenerable by re-running scrapers)
+completed_csv_files_from_scrapers/
+completed_scrapers/*.csv
+*.csv
+
+# Scraper debug artifacts
+completed_scrapers/*_debug.png
+completed_scrapers/*_cookies.json
+
+# Local tooling
+.claude/

@@ -1,0 +1,52 @@
+download_and_log.py
+
+pip install psycopg2-binary google-api-python-client google-auth-httplib2 google-auth-oauthlib tqdm
+
+gymshark_women.py
+
+pip install requests beautifulsoup4 tqdm pandas
+pip install playwright
+playwright install
+
+log_closet_images.py
+
+pip install psycopg2-binary
+
+generate_clip_embeddings_for_closet.py
+
+pip install torch torchvision transformers pillow pillow-heif
+
+generate_clip_embeddings_for_data.py
+
+pip install torch torchvision transformers pillow pandas requests
+
+get_brand_from_image.py
+
+try 1: pip install pytesseract opencv-python pillow torch torchvision opencv-python pillow pytesseract groundingdino
+
+try 2: pip install torch torchvision torchaudio --index-url https://download.pytorch.org/whl/cu118
+pip install opencv-python requests transformers groundingdino segment-anything
+pip install pytesseract
+pip install supervision addict yapf pycocotools timm
+
+get_descriptions_of_closet_images.py
+
+pip install transformers torch torchvision pillow
+
+for the app
+
+flask
+flask-cors
+psycopg2-binary
+werkzeug
+pyjwt
+
+yolo_tag_ocr.py
+
+pip install ultralytics easyocr opencv-python pillow realesrgan
+
+replicate_icon_clothing.py
+
+pip install replicate requests pillow
+
+pip install mediapipe rembg opencv-python pillow numpy

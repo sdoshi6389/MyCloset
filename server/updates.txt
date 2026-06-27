@@ -1,0 +1,20 @@
+7/23/25
+
+created scrapers for abercrombie, cottonon, forever21, handm, hollister, essentials and put everything into their own postgresql databases, besides handm men
+
+issue with handm men, this wifi is blocked on their server because of the scraping, run the scraping on a diff wifi and send to postgresql database
+
+generates clip embeddings from csv file and adds them into the databases
+
+have the faiss similarity search working, takes in all the clip vectors from the databases and uses them as vectors in the search space and the query vectors
+are the vectors from the mycloset database
+
+currently figuring out how to detect what brandname a clothing is from based on its tag or any print on the clothing itself if its possible to detect the brandname
+, the method that i have right now (get_brand_from_image.py) uses a model that is very taxing, cannot run on personal laptop, need cuda and gpu
+
+will try a light and different version of an attempt tomorrow, still have to brainstorm how to determine the text on a tag or the print of a clothing
+
+7/27/25
+
+
+

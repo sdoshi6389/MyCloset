@@ -1,0 +1,267 @@
+/* ── Page header ──────────────────────────────────────────────────────────── */
+.outfits-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 28px;
+}
+.outfits-header .page-heading { margin-bottom: 0; }
+
+/* ══════════════════════════════════════════════════════════════════════════
+   OUTFIT BUILDER WORKSPACE
+   Three-column layout: [Closet Drawer] [Canvas] [Controls Panel]
+   Escapes app-main padding to fill the viewport.
+   ══════════════════════════════════════════════════════════════════════════ */
+
+.outfit-workspace {
+  display: flex;
+  /* Escape the 32px padding on all four sides of .app-main */
+  margin: -32px;
+  height: calc(100vh - 0px);
+  overflow: hidden;
+}
+
+/* ── Center column — canvas area ─────────────────────────────────────────── */
+.workspace-center {
+  flex: 1;
+  display: flex;
+  align-items: flex-start;
+  justify-content: center;
+  overflow-y: auto;
+  padding: 40px 24px 60px;
+  background: #06060d;
+  scrollbar-width: thin;
+  scrollbar-color: #121220 transparent;
+}
+.workspace-center::-webkit-scrollbar { width: 4px; }
+.workspace-center::-webkit-scrollbar-thumb { background: #121220; border-radius: 4px; }
+
+/* ── Right column — controls ─────────────────────────────────────────────── */
+.workspace-controls {
+  width: 276px;
+  flex-shrink: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+  padding: 24px 20px 32px;
+  background: #09090f;
+  border-left: 1px solid rgba(255, 255, 255, 0.035);
+  overflow-y: auto;
+  scrollbar-width: thin;
+  scrollbar-color: #131322 transparent;
+}
+.workspace-controls::-webkit-scrollbar { width: 3px; }
+.workspace-controls::-webkit-scrollbar-thumb { background: #181828; border-radius: 3px; }
+
+/* Controls header row */
+.wc-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  flex-shrink: 0;
+}
+.wc-title {
+  font-size: 0.72rem;
+  font-weight: 700;
+  color: #c8c0f0;
+  margin: 0;
+  text-transform: uppercase;
+  letter-spacing: 0.1em;
+}
+.wc-cancel {
+  background: transparent;
+  border: 1px solid #1e1e2e;
+  border-radius: 6px;
+  color: #3e3e58;
+  font-size: 0.8rem;
+  padding: 4px 8px;
+  cursor: pointer;
+  transition: color 0.12s, border-color 0.12s;
+}
+.wc-cancel:hover { color: #e07070; border-color: #e07070; }
+
+/* Composition summary (filled zones) */
+.wc-composition {
+  background: #0b0b18;
+  border: 1px solid rgba(255, 255, 255, 0.038);
+  border-radius: 12px;
+  padding: 10px 12px;
+  min-height: 56px;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  flex-shrink: 0;
+}
+.wc-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  animation: wcRowIn 0.18s ease;
+}
+@keyframes wcRowIn {
+  from { opacity: 0; transform: translateY(-3px); }
+  to   { opacity: 1; transform: translateY(0); }
+}
+.wc-zone-label {
+  font-size: 0.58rem;
+  font-weight: 600;
+  color: #383855;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  width: 68px;
+  flex-shrink: 0;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.wc-item-name {
+  flex: 1;
+  font-size: 0.74rem;
+  color: #c0b0f0;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.wc-clear {
+  background: transparent;
+  border: none;
+  color: #323248;
+  font-size: 0.65rem;
+  cursor: pointer;
+  padding: 2px 5px;
+  border-radius: 4px;
+  transition: color 0.12s;
+  flex-shrink: 0;
+}
+.wc-clear:hover { color: #e07070; }
+.wc-empty-msg {
+  font-size: 0.68rem;
+  color: #252538;
+  margin: 0;
+  padding: 6px 0;
+  text-align: center;
+  line-height: 1.55;
+}
+
+/* Metadata fields */
+.wc-fields {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+/* Save button */
+.wc-save {
+  width: 100%;
+  padding: 11px;
+  font-size: 0.88rem;
+  flex-shrink: 0;
+}
+
+/* Recommend button */
+.wc-recommend-btn {
+  width: 100%;
+  font-size: 0.75rem;
+  padding: 8px;
+}
+
+/* Recommendations panel */
+.wc-recs {
+  background: rgba(42, 26, 78, 0.24);
+  border: 1px solid rgba(100, 66, 170, 0.14);
+  border-radius: 12px;
+  padding: 12px;
+}
+.wc-recs-title {
+  font-size: 0.65rem;
+  font-weight: 700;
+  color: #8878d0;
+  margin: 0 0 10px;
+  text-transform: uppercase;
+  letter-spacing: 0.07em;
+}
+.wc-rec-row {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  padding: 6px 0;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.035);
+}
+.wc-rec-row:last-child { border-bottom: none; }
+.wc-rec-name { font-size: 0.76rem; font-weight: 600; color: #c0b8e0; }
+.wc-rec-why  { font-size: 0.68rem; color: #585878; }
+
+/* ══════════════════════════════════════════════════════════════════════════
+   SAVED OUTFITS GRID
+   ══════════════════════════════════════════════════════════════════════════ */
+
+.outfits-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(230px, 1fr));
+  gap: 20px;
+}
+
+.outfit-card {
+  background: #121218;
+  border: 1px solid #1e1e2a;
+  border-radius: 20px;
+  overflow: hidden;
+  transition: border-color 0.15s, transform 0.15s, box-shadow 0.15s;
+  cursor: default;
+}
+.outfit-card:hover {
+  border-color: #4a3575;
+  transform: translateY(-3px);
+  box-shadow: 0 12px 40px rgba(0, 0, 0, 0.5);
+}
+
+.outfit-card-canvas {
+  position: relative;
+  background: #06060d;
+  overflow: hidden;
+}
+/* The compact canvas fills the card width */
+.outfit-card-canvas .outfit-canvas {
+  width: 100%;
+}
+
+.outfit-card-body {
+  padding: 14px 16px 16px;
+}
+.outfit-card-name {
+  font-size: 0.92rem;
+  font-weight: 700;
+  color: #e0e0f0;
+  margin: 0 0 6px;
+}
+.outfit-card-meta {
+  font-size: 0.76rem;
+  color: #5858a0;
+  margin: 0 0 4px;
+}
+
+/* Stars */
+.outfit-stars { display: flex; gap: 3px; margin-top: 10px; }
+.star {
+  background: transparent;
+  border: none;
+  font-size: 1.05rem;
+  color: #252538;
+  cursor: pointer;
+  padding: 0;
+  transition: color 0.1s, transform 0.1s;
+}
+.star.filled { color: #d8a020; }
+.star:hover  { color: #b8a050; transform: scale(1.15); }
+
+/* Recommendations section (in saved view) */
+.recommend-row {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 8px 0;
+  border-bottom: 1px solid #161624;
+}
+.recommend-name  { font-weight: 600; color: #d0d0e8; min-width: 120px; }
+.recommend-why   { flex: 1; font-size: 0.82rem; color: #6868a0; }
+.recommend-score { font-size: 0.8rem; color: #5858c0; }

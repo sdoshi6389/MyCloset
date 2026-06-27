@@ -1,0 +1,12 @@
+7/21/25
+
+generate vector embeddings for all images in the csv files
+
+after generating embeddings, put the embeddings as well as the info in the csv files into the brand database 
+(create a new database for each brand and make sure no duplicate entries based on name, if an entry needs to be updated in the database 
+based on the new csv, make sure to update the entry)
+
+scrape for three more brands: forever 21 (relatively easy), asos (hard), abercrombie (relatively easy)
+
+expand upon this chatgpt link (https://chatgpt.com/c/687ad8db-0188-8005-a06e-ad70d68f5029) and create a full plan on how to build a smart outfit recommendation
+system, write up a detailed flow chart (must be handwritten with steps explaining how to achieve each part in the chart)

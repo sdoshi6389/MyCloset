@@ -1,0 +1,169 @@
+/* ── Header ──────────────────────────────────────────────────────────────── */
+.circles-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 24px;
+}
+.circles-header .page-heading { margin-bottom: 0; }
+
+/* ── Two-panel layout ────────────────────────────────────────────────────── */
+.circles-layout {
+  display: grid;
+  grid-template-columns: 260px 1fr;
+  gap: 20px;
+  align-items: start;
+}
+
+@media (max-width: 700px) {
+  .circles-layout { grid-template-columns: 1fr; }
+}
+
+/* ── Left panel ──────────────────────────────────────────────────────────── */
+.circles-list-panel { padding: 16px; }
+
+.circles-panel-heading {
+  font-size: 0.9rem;
+  font-weight: 600;
+  color: #8080a8;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  margin: 0 0 14px;
+}
+
+.circle-list-item {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 10px 10px;
+  border-radius: 10px;
+  cursor: pointer;
+  transition: background 0.15s;
+  margin-bottom: 4px;
+}
+.circle-list-item:hover  { background: #22222e; }
+.circle-list-item.active { background: #2c2040; }
+
+.circle-list-icon { font-size: 1.3rem; }
+
+.circle-list-info {
+  display: flex;
+  flex-direction: column;
+}
+
+.circle-list-name { font-size: 0.9rem; font-weight: 600; color: #d0d0e8; }
+.circle-list-meta { font-size: 0.75rem; color: #666; }
+
+/* ── Right detail ────────────────────────────────────────────────────────── */
+.circles-detail { }
+.circles-empty { text-align: center; color: #555; padding: 40px; }
+
+/* ── Add member row ──────────────────────────────────────────────────────── */
+.add-member-row {
+  display: flex;
+  gap: 8px;
+  margin-bottom: 20px;
+}
+
+/* ── Members list ────────────────────────────────────────────────────────── */
+.members-list { display: flex; flex-direction: column; gap: 8px; }
+
+.member-row {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 10px;
+  background: #12121a;
+  border: 1px solid #2a2a35;
+  border-radius: 10px;
+}
+
+.member-avatar {
+  width: 36px;
+  height: 36px;
+  border-radius: 50%;
+  background: #2c2040;
+  color: #c9b8ff;
+  font-weight: 700;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 0.9rem;
+  flex-shrink: 0;
+}
+
+.member-info {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+}
+
+.member-email { font-size: 0.875rem; color: #d0d0e8; }
+.member-role  { font-size: 0.72rem; color: #777; text-transform: capitalize; }
+
+/* ── Shared closet modal ─────────────────────────────────────────────────── */
+.shared-closet-modal {
+  max-width: 720px;
+  max-height: 85vh;
+  display: flex;
+  flex-direction: column;
+}
+
+.shared-closet-header {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  margin-bottom: 20px;
+  padding-bottom: 16px;
+  border-bottom: 1px solid #2a2a35;
+}
+
+.shared-closet-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(140px, 1fr));
+  gap: 12px;
+  overflow-y: auto;
+  padding-right: 4px;
+}
+
+.shared-closet-card {
+  background: #12121a;
+  border: 1px solid #2a2a35;
+  border-radius: 10px;
+  overflow: hidden;
+  transition: border-color 0.15s;
+}
+.shared-closet-card:hover { border-color: #3a3a50; }
+
+.shared-closet-card img {
+  width: 100%;
+  aspect-ratio: 1;
+  object-fit: cover;
+  display: block;
+}
+
+.shared-closet-card-label {
+  padding: 8px;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.scc-brand {
+  font-size: 0.78rem;
+  font-weight: 600;
+  color: #d0d0e8;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.scc-chip {
+  font-size: 0.68rem;
+  color: #8080a8;
+  background: #22222e;
+  border-radius: 20px;
+  padding: 2px 7px;
+  display: inline-block;
+  width: fit-content;
+}

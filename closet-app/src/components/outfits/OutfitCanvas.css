@@ -1,0 +1,409 @@
+/* ═══════════════════════════════════════════════════════════════════════════
+   DECONSTRUCTED OUTFIT CANVAS
+   Clothing pieces float in body positions. Ghost silhouettes mark empty zones.
+   No human outline — negative space and ghost shapes imply the body.
+   ═══════════════════════════════════════════════════════════════════════════ */
+
+/* ─── Canvas shell ──────────────────────────────────────────────────────── */
+.outfit-canvas {
+  position: relative;
+  width: 100%;
+  max-width: 480px;
+  height: 720px;
+  background: radial-gradient(ellipse 58% 76% at 50% 36%, #0e0c20 0%, #06060d 100%);
+  border-radius: 28px;
+  border: 1px solid rgba(255, 255, 255, 0.025);
+  overflow: hidden;
+  flex-shrink: 0;
+  user-select: none;
+}
+
+.oc-compact {
+  height: 340px;
+  max-width: 100%;
+  border-radius: 0;
+  border: none;
+  background: #06060d;
+}
+
+/* ─── Body-presence aura ────────────────────────────────────────────────── */
+.oc-aura {
+  position: absolute;
+  top: 6%;
+  left: 50%;
+  transform: translateX(-50%);
+  width: 42%;
+  height: 78%;
+  background: radial-gradient(
+    ellipse at 50% 28%,
+    rgba(100, 64, 205, 0.065) 0%,
+    rgba(72, 44, 155, 0.028) 52%,
+    transparent 100%
+  );
+  pointer-events: none;
+  z-index: 0;
+}
+
+/* ─── Zone base ─────────────────────────────────────────────────────────── */
+.oc-zone {
+  position: absolute;
+  transform: translateX(-50%);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+/* ════════════════════════════════════════════════════════════════════════════
+   GHOST SILHOUETTES
+   Each empty zone shows a clothing-shaped dashed outline via ::before/::after.
+   The shape tells you what goes there without text or boxes.
+   ════════════════════════════════════════════════════════════════════════════ */
+
+/* Reset — no pseudo-elements unless a per-zone rule activates them */
+.oc-zone::before,
+.oc-zone::after {
+  content: none;
+  position: absolute;
+  pointer-events: none;
+  transition: border-color 0.24s ease, background 0.24s ease;
+}
+
+/* Shared ghost surface (border + fill) applied via cascade */
+.oc-empty-zone.oc-zone-inter::before,
+.oc-empty-zone.oc-zone-inter::after {
+  border: 1px dashed rgba(92, 68, 170, 0.16);
+  background: rgba(72, 50, 150, 0.034);
+}
+
+/* Hover + active: ghost brightens ──────────────────────────────────────── */
+.oc-empty-zone.oc-zone-inter:hover::before,
+.oc-empty-zone.oc-zone-inter:hover::after,
+.oc-zone-active.oc-empty-zone::before,
+.oc-zone-active.oc-empty-zone::after {
+  border-color: rgba(132, 96, 240, 0.38) !important;
+  background: rgba(96, 64, 196, 0.1) !important;
+}
+
+/* ── Hat — dome circle ─────────────────────────────────────────────────── */
+.oc-z-head.oc-empty-zone::before {
+  content: "";
+  inset: 5%;
+  border-radius: 50%;
+}
+
+/* ── Necklace — slender pill ────────────────────────────────────────────── */
+.oc-z-neck.oc-empty-zone::before {
+  content: "";
+  top: 16%; bottom: 16%;
+  left: 18%; right: 18%;
+  border-radius: 50px;
+}
+
+/* ── Jacket / Coat — wide with shoulder taper ──────────────────────────── */
+.oc-z-torso_outer.oc-empty-zone::before {
+  content: "";
+  top: 10%; bottom: 8%;
+  left: 6%; right: 6%;
+  border-radius: 16px 16px 22px 22px;
+}
+
+/* ── Shirt / Top — narrower rect ────────────────────────────────────────── */
+.oc-z-torso_inner.oc-empty-zone::before {
+  content: "";
+  top: 10%; bottom: 8%;
+  left: 14%; right: 14%;
+  border-radius: 10px 10px 16px 16px;
+}
+
+/* ── Pants — two leg columns ────────────────────────────────────────────── */
+.oc-z-legs.oc-empty-zone::before,
+.oc-z-legs.oc-empty-zone::after {
+  content: "";
+  width: 43%;
+  top: 5%; bottom: 2%;
+  border-radius: 8px 8px 32px 32px;
+}
+.oc-z-legs.oc-empty-zone::before { left:  2%; }
+.oc-z-legs.oc-empty-zone::after  { right: 2%; }
+
+/* ── Shoes — two organic shoe ovals ────────────────────────────────────── */
+.oc-z-feet.oc-empty-zone::before,
+.oc-z-feet.oc-empty-zone::after {
+  content: "";
+  width: 34%;
+  height: 80%;
+  top: 10%;
+  border-radius: 50% 44% 58% 42% / 42% 38% 62% 58%;
+}
+.oc-z-feet.oc-empty-zone::before { left:  5%; transform: rotate(-9deg); }
+.oc-z-feet.oc-empty-zone::after  { right: 5%; transform: rotate(9deg) scaleX(-1); }
+
+/* ── Accessories ────────────────────────────────────────────────────────── */
+.oc-z-left_acc.oc-empty-zone::before,
+.oc-z-right_acc.oc-empty-zone::before {
+  content: "";
+  inset: 14%;
+  border-radius: 50%;
+}
+
+/* ════════════════════════════════════════════════════════════════════════════
+   EMPTY ZONE INTERACTION STATES
+   ════════════════════════════════════════════════════════════════════════════ */
+
+/* Read-only: hide all empty zones */
+.outfit-canvas:not(.oc-interactive) .oc-empty-zone { display: none; }
+
+.oc-empty-zone.oc-zone-inter { cursor: pointer; }
+
+/* Active zone — dashed ring */
+.oc-zone.oc-zone-active {
+  outline: 1.5px dashed rgba(138, 94, 255, 0.5);
+  outline-offset: 5px;
+  border-radius: 14px;
+}
+.oc-z-head.oc-zone-active      { border-radius: 50%; outline-offset: 3px; }
+.oc-z-left_acc.oc-zone-active,
+.oc-z-right_acc.oc-zone-active { border-radius: 50%; }
+
+/* Zone label — floats below zone, visible on hover / when active */
+.oc-zone-label {
+  position: absolute;
+  bottom: -20px;
+  left: 50%;
+  transform: translateX(-50%);
+  font-size: 0.53rem;
+  font-weight: 700;
+  color: rgba(136, 102, 230, 0.88);
+  text-transform: uppercase;
+  letter-spacing: 0.09em;
+  white-space: nowrap;
+  background: rgba(8, 6, 20, 0.84);
+  border: 1px solid rgba(104, 72, 196, 0.24);
+  border-radius: 20px;
+  padding: 2px 10px;
+  backdrop-filter: blur(8px);
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity 0.18s;
+  z-index: 60;
+}
+.oc-empty-zone.oc-zone-inter:hover .oc-zone-label,
+.oc-zone-active .oc-zone-label { opacity: 1; }
+
+/* Pulse all ghost shapes when needsZone feedback */
+@keyframes ocZonePulse {
+  0%, 100% {}
+  50% {
+    border-color: rgba(148, 108, 255, 0.5) !important;
+    background: rgba(104, 72, 210, 0.13) !important;
+  }
+}
+.oc-pulse-zones .oc-empty-zone.oc-zone-inter::before,
+.oc-pulse-zones .oc-empty-zone.oc-zone-inter::after {
+  animation: ocZonePulse 0.52s ease 3;
+}
+
+/* ════════════════════════════════════════════════════════════════════════════
+   CLOTHING IMAGES — filled zones
+   ════════════════════════════════════════════════════════════════════════════ */
+
+.oc-item-img {
+  width: 100%;
+  height: 100%;
+  object-fit: contain;
+  display: block;
+  pointer-events: none;
+  filter:
+    drop-shadow(0 14px 42px rgba(0, 0, 0, 0.94))
+    drop-shadow(0 4px 10px rgba(0, 0, 0, 0.72));
+  transition: filter 0.22s ease;
+}
+
+/* Hover: lift + purple glow */
+.oc-filled.oc-zone-inter {
+  cursor: pointer;
+  transition: transform 0.24s cubic-bezier(0.34, 1.56, 0.64, 1);
+}
+.oc-filled.oc-zone-inter:hover {
+  transform: translateX(-50%) translateY(-7px) !important;
+  z-index: 30 !important;
+}
+.oc-filled.oc-zone-inter:hover .oc-item-img {
+  filter:
+    drop-shadow(0 22px 56px rgba(92, 52, 220, 0.62))
+    drop-shadow(0 7px 20px rgba(0, 0, 0, 0.8));
+}
+
+/* ════════════════════════════════════════════════════════════════════════════
+   TWO-SHOE DISPLAY
+   The same shoe item renders as a mirrored pair for the feet zone.
+   ════════════════════════════════════════════════════════════════════════════ */
+.oc-feet-pair {
+  width: 100%;
+  height: 100%;
+  display: flex;
+  align-items: flex-end;
+  justify-content: space-around;
+  padding: 0 3%;
+  box-sizing: border-box;
+}
+.oc-shoe {
+  width: 42%;
+  height: 100%;
+  object-fit: contain;
+  pointer-events: none;
+  filter:
+    drop-shadow(0 9px 24px rgba(0, 0, 0, 0.9))
+    drop-shadow(0 3px 8px rgba(0, 0, 0, 0.68));
+  transition: filter 0.22s ease;
+}
+.oc-shoe-l { transform: rotate(-8deg);           transform-origin: 50% 90%; }
+.oc-shoe-r { transform: rotate(8deg) scaleX(-1); transform-origin: 50% 90%; }
+.oc-filled.oc-zone-inter:hover .oc-shoe {
+  filter:
+    drop-shadow(0 16px 38px rgba(92, 52, 218, 0.56))
+    drop-shadow(0 5px 14px rgba(0, 0, 0, 0.8));
+}
+
+/* ════════════════════════════════════════════════════════════════════════════
+   FLOAT-IN / FLOAT-OUT ANIMATIONS
+   ════════════════════════════════════════════════════════════════════════════ */
+@keyframes ocFloatIn {
+  0% {
+    opacity: 0;
+    transform: translateX(-50%) scale(0.6) translateY(28px);
+    filter: blur(8px);
+  }
+  52%  { opacity: 1; filter: blur(0); }
+  76%  { transform: translateX(-50%) scale(1.07) translateY(-5px); }
+  100% { transform: translateX(-50%) scale(1) translateY(0); }
+}
+.oc-entering {
+  animation: ocFloatIn 0.65s cubic-bezier(0.34, 1.45, 0.64, 1) forwards;
+}
+
+@keyframes ocFloatOut {
+  0%   { opacity: 1; transform: translateX(-50%) scale(1) translateY(0); }
+  100% {
+    opacity: 0;
+    transform: translateX(-50%) scale(0.72) translateY(-30px);
+    filter: blur(5px);
+  }
+}
+.oc-exiting {
+  animation: ocFloatOut 0.3s cubic-bezier(0.4, 0, 1, 1) forwards !important;
+  pointer-events: none;
+}
+
+/* ════════════════════════════════════════════════════════════════════════════
+   REAL-PHOTO PREVIEW
+   Appears at canvas level (not inside any zone) so it's never clipped.
+   Shows the original closet photo when hovering a filled zone.
+   ════════════════════════════════════════════════════════════════════════════ */
+@keyframes ppFadeIn {
+  from { opacity: 0; transform: scale(0.92) translateY(6px); }
+  to   { opacity: 1; transform: scale(1)    translateY(0);   }
+}
+
+.oc-photo-preview {
+  position: absolute;
+  width: 154px;
+  background: rgba(7, 5, 18, 0.97);
+  border: 1px solid rgba(100, 70, 200, 0.28);
+  border-radius: 14px;
+  overflow: hidden;
+  z-index: 200;
+  pointer-events: none;
+  box-shadow:
+    0 24px 64px rgba(0, 0, 0, 0.88),
+    0  4px 16px rgba(0, 0, 0, 0.6),
+    inset 0 1px 0 rgba(255, 255, 255, 0.04);
+  animation: ppFadeIn 0.16s cubic-bezier(0.22, 1, 0.36, 1) forwards;
+}
+
+/* Right side of canvas (default — most zones are centered) */
+.oc-photo-preview.oc-pp-right { right: 10px; }
+/* Left side of canvas (for right-side zones like right_acc) */
+.oc-photo-preview.oc-pp-left  { left:  10px; }
+
+.oc-pp-img {
+  width: 100%;
+  aspect-ratio: 1;
+  object-fit: cover;
+  display: block;
+}
+
+.oc-pp-meta {
+  padding: 8px 10px 9px;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.oc-pp-brand {
+  font-size: 0.68rem;
+  font-weight: 700;
+  color: #c8b8f0;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.oc-pp-type {
+  font-size: 0.58rem;
+  color: #4e4872;
+  text-transform: capitalize;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+/* ════════════════════════════════════════════════════════════════════════════
+   SWAP / REMOVE CONTROLS
+   ════════════════════════════════════════════════════════════════════════════ */
+.oc-item-ctrls {
+  position: absolute;
+  top: 3px;
+  right: -6px;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity 0.15s;
+  z-index: 50;
+}
+.oc-filled.oc-zone-inter:hover .oc-item-ctrls {
+  opacity: 1;
+  pointer-events: auto;
+}
+
+.oc-ctrl-swap,
+.oc-ctrl-remove {
+  background: rgba(8, 6, 20, 0.95);
+  border: 1px solid rgba(110, 78, 202, 0.4);
+  border-radius: 20px;
+  color: #b0a2e8;
+  font-size: 0.64rem;
+  padding: 3px 9px;
+  cursor: pointer;
+  white-space: nowrap;
+  backdrop-filter: blur(10px);
+  transition: background 0.12s, border-color 0.12s, color 0.12s;
+  line-height: 1.4;
+}
+.oc-ctrl-swap:hover {
+  background: rgba(62, 38, 138, 0.92);
+  border-color: rgba(152, 112, 255, 0.68);
+  color: #d4c8ff;
+}
+.oc-ctrl-remove {
+  color: #d87878;
+  border-color: rgba(195, 60, 60, 0.28);
+  padding: 3px 7px;
+}
+.oc-ctrl-remove:hover {
+  background: rgba(120, 28, 28, 0.9);
+  border-color: rgba(222, 72, 72, 0.65);
+  color: #ffa0a0;
+}

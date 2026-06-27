@@ -1,0 +1,281 @@
+/* ═══════════════════════════════════════════════════════════════
+   OUTFIT MANNEQUIN — fashion flat-lay canvas
+   No body outline. Clothes float on a dark surface.
+   Items are positioned by body region with natural proportions.
+   ═══════════════════════════════════════════════════════════════ */
+
+/* ── Canvas ──────────────────────────────────────────────────────────────── */
+.outfit-mannequin {
+  position: relative;
+  width: 320px;
+  height: 600px;
+  background:
+    radial-gradient(ellipse 70% 60% at 50% 35%, #0f0f1e 0%, #07070e 100%);
+  border-radius: 24px;
+  border: 1px solid rgba(255, 255, 255, 0.05);
+  flex-shrink: 0;
+  overflow: visible;
+}
+
+.outfit-mannequin.compact {
+  width: 100%;
+  height: 360px;
+  border-radius: 0;
+  border: none;
+  background: #07070e;
+}
+
+/* ── Zone base ───────────────────────────────────────────────────────────── */
+.outfit-zone {
+  position: absolute;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: transform 0.15s ease, filter 0.15s ease;
+}
+
+/* ═══════════════════════════════════════════════════════════════
+   PER-ZONE POSITIONING
+   All positioned relative to the canvas.
+   Widths chosen to mimic realistic body proportions from above:
+     outer   > bottom  > top  > shoes  > hat
+   Z-order (back→front): shoes → bottom → outer → top → hat
+   ═══════════════════════════════════════════════════════════════ */
+
+/* Hat – small, circular, head area */
+.outfit-zone-hat {
+  top: 1.5%;
+  left: 50%;
+  transform: translateX(-50%);
+  width: 20%;
+  aspect-ratio: 1;
+  z-index: 5;
+  border-radius: 50%;
+}
+
+/* Outerwear – widest zone, full shoulder spread */
+.outfit-zone-outer {
+  top: 11%;
+  left: 50%;
+  transform: translateX(-50%);
+  width: 90%;
+  height: 36%;
+  z-index: 2;
+}
+
+/* Top – shirt, narrower than outer, sits in front */
+.outfit-zone-top {
+  top: 13%;
+  left: 50%;
+  transform: translateX(-50%);
+  width: 62%;
+  height: 32%;
+  z-index: 3;
+}
+
+/* Bottom – pants/skirt, hip-width */
+.outfit-zone-bottom {
+  top: 44%;
+  left: 50%;
+  transform: translateX(-50%);
+  width: 66%;
+  height: 37%;
+  z-index: 1;
+}
+
+/* Shoes – feet area */
+.outfit-zone-shoes {
+  top: 80%;
+  left: 50%;
+  transform: translateX(-50%);
+  width: 52%;
+  height: 17%;
+  z-index: 0;
+}
+
+/* ── Compact scale adjustments ───────────────────────────────────────────── */
+.outfit-mannequin.compact .outfit-zone-hat    { width: 18%; }
+.outfit-mannequin.compact .outfit-zone-outer  { width: 88%; height: 34%; }
+.outfit-mannequin.compact .outfit-zone-top    { width: 60%; height: 31%; }
+.outfit-mannequin.compact .outfit-zone-bottom { width: 64%; height: 36%; }
+.outfit-mannequin.compact .outfit-zone-shoes  { width: 50%; height: 16%; }
+
+/* ── Filled zones – floating cutout treatment ────────────────────────────── */
+.outfit-zone.filled {
+  cursor: default;
+}
+
+.zone-img {
+  width: 100%;
+  height: 100%;
+  object-fit: contain;
+  display: block;
+  /* Clothing items float with depth */
+  filter:
+    drop-shadow(0 8px 28px rgba(0, 0, 0, 0.75))
+    drop-shadow(0 2px 6px rgba(0, 0, 0, 0.5));
+  transition: filter 0.2s ease, transform 0.15s ease;
+  pointer-events: none;
+}
+
+/* Hat is circular so use cover + clip */
+.outfit-zone-hat .zone-img {
+  object-fit: cover;
+  border-radius: 50%;
+}
+
+/* Hover lift on the whole zone when interactive */
+.outfit-zone.filled.clickable:hover {
+  transform: translateX(-50%) translateY(-3px);
+  z-index: 20 !important;
+}
+.outfit-zone-hat.filled.clickable:hover {
+  transform: translateX(-50%) translateY(-3px);
+}
+
+.outfit-zone.filled.clickable:hover .zone-img {
+  filter:
+    drop-shadow(0 14px 36px rgba(80, 50, 160, 0.45))
+    drop-shadow(0 4px 12px rgba(0, 0, 0, 0.6));
+}
+
+/* ── Controls overlay (swap / remove) ────────────────────────────────────── */
+.zone-actions {
+  position: absolute;
+  top: 6px;
+  right: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  opacity: 0;
+  transition: opacity 0.15s;
+  pointer-events: none;
+}
+
+.outfit-zone.filled.clickable:hover .zone-actions {
+  opacity: 1;
+  pointer-events: auto;
+}
+
+.zone-swap,
+.zone-remove {
+  background: rgba(20, 14, 40, 0.88);
+  border: 1px solid rgba(140, 100, 220, 0.3);
+  border-radius: 20px;
+  color: #c8b8ff;
+  font-size: 0.62rem;
+  font-weight: 600;
+  padding: 4px 10px;
+  cursor: pointer;
+  white-space: nowrap;
+  letter-spacing: 0.04em;
+  transition: background 0.12s, border-color 0.12s;
+  backdrop-filter: blur(6px);
+}
+.zone-swap:hover  { background: rgba(80, 50, 140, 0.85); border-color: rgba(160, 120, 255, 0.6); }
+.zone-remove {
+  color: #e07070;
+  border-color: rgba(200, 80, 80, 0.2);
+  padding: 4px 8px;
+}
+.zone-remove:hover { background: rgba(140, 40, 40, 0.7); border-color: rgba(220, 80, 80, 0.5); }
+
+/* ── Empty zones ─────────────────────────────────────────────────────────── */
+
+/* Non-interactive (card view): hide empty zones completely */
+.outfit-mannequin:not(.interactive) .outfit-zone.empty {
+  display: none;
+}
+
+/* Interactive empty: invisible but clickable,
+   shows a subtle pill on hover */
+.outfit-zone.empty.clickable {
+  cursor: pointer;
+}
+
+.zone-add-hint {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 3px;
+  opacity: 0;
+  transition: opacity 0.18s ease;
+  pointer-events: none;
+}
+
+.outfit-zone.empty.clickable:hover .zone-add-hint {
+  opacity: 1;
+}
+
+.zone-add-icon {
+  font-size: 1rem;
+  font-weight: 200;
+  color: rgba(160, 130, 220, 0.9);
+  line-height: 1;
+}
+
+.zone-add-label {
+  font-size: 0.6rem;
+  font-weight: 500;
+  color: rgba(140, 110, 200, 0.8);
+  text-align: center;
+  letter-spacing: 0.04em;
+  line-height: 1.3;
+}
+
+/* Shoes hint: horizontal layout (narrow zone) */
+.outfit-zone-shoes .zone-add-hint {
+  flex-direction: row;
+  gap: 6px;
+}
+.outfit-zone-shoes .zone-add-label { font-size: 0.58rem; }
+
+/* ── Empty canvas CTA (when nothing has been added yet) ───────────────────── */
+.mannequin-empty-cta {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 20px;
+  pointer-events: none;
+  z-index: 10;
+}
+
+.mannequin-empty-cta p {
+  font-size: 0.78rem;
+  color: rgba(140, 120, 200, 0.5);
+  margin: 0;
+  text-align: center;
+  letter-spacing: 0.03em;
+}
+
+.mannequin-cta-zones {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 8px;
+  pointer-events: auto;
+}
+
+.cta-zone-pill {
+  background: rgba(30, 20, 55, 0.7);
+  border: 1px solid rgba(100, 70, 170, 0.25);
+  border-radius: 24px;
+  color: rgba(180, 150, 255, 0.6);
+  font-size: 0.7rem;
+  font-weight: 500;
+  padding: 7px 20px;
+  cursor: pointer;
+  transition: background 0.15s, border-color 0.15s, color 0.15s, transform 0.1s;
+  letter-spacing: 0.04em;
+  white-space: nowrap;
+  backdrop-filter: blur(4px);
+}
+.cta-zone-pill:hover {
+  background: rgba(70, 45, 130, 0.75);
+  border-color: rgba(140, 100, 230, 0.6);
+  color: rgba(220, 195, 255, 0.95);
+  transform: scale(1.04);
+}

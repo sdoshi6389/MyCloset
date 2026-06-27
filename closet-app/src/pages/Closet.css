@@ -1,0 +1,316 @@
+/* ── Upload bar ─────────────────────────────────────────────────────────── */
+.closet-upload-bar {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 10px;
+  margin-bottom: 20px;
+}
+
+.upload-file-label {
+  background: #22222e;
+  border: 1px dashed #3a3a50;
+  border-radius: 8px;
+  padding: 8px 14px;
+  color: #9090b0;
+  font-size: 0.875rem;
+  cursor: pointer;
+  transition: background 0.15s;
+}
+.upload-file-label:hover { background: #2a2a3a; }
+
+.closet-camera-preview {
+  width: 160px;
+  border-radius: 8px;
+  border: 1px solid #3a3a50;
+}
+
+/* ── Category tabs ──────────────────────────────────────────────────────── */
+.closet-cat-tabs {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin-bottom: 24px;
+}
+
+.closet-cat-tab {
+  padding: 6px 14px;
+  border-radius: 20px;
+  border: 1px solid #2a2a3a;
+  background: transparent;
+  color: #7070a0;
+  font-size: 0.85rem;
+  cursor: pointer;
+  transition: background 0.15s, color 0.15s, border-color 0.15s;
+}
+.closet-cat-tab:hover { background: #22222e; color: #c0c0d4; }
+.closet-cat-tab.active {
+  background: #2c2040;
+  border-color: #7c5cbf;
+  color: #c9b8ff;
+}
+
+.closet-add-cat {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin-left: 8px;
+}
+
+/* ── Category section ───────────────────────────────────────────────────── */
+.closet-category-section { margin-bottom: 32px; }
+
+.closet-category-heading {
+  font-size: 1rem;
+  font-weight: 600;
+  color: #8080a8;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  margin-bottom: 14px;
+  padding-bottom: 8px;
+  border-bottom: 1px solid #22222e;
+}
+
+/* ── Cards grid ──────────────────────────────────────────────────────────── */
+.closet-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(180px, 1fr));
+  gap: 16px;
+}
+
+.closet-card {
+  background: #18181f;
+  border: 1px solid #2a2a35;
+  border-radius: 12px;
+  overflow: hidden;
+  transition: border-color 0.15s, transform 0.15s;
+}
+.closet-card:hover {
+  border-color: #5a4080;
+  transform: translateY(-2px);
+}
+
+.closet-card-image {
+  position: relative;
+  width: 100%;
+  aspect-ratio: 1;
+  overflow: hidden;
+  cursor: zoom-in;
+  background: #12121a;
+}
+.closet-card-image img:first-child {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  transition: transform 0.2s;
+}
+.closet-card-image:hover img:first-child { transform: scale(1.04); }
+
+.closet-card-icon-badge {
+  position: absolute;
+  bottom: 6px;
+  right: 6px;
+  width: 36px;
+  height: 36px;
+  border-radius: 8px;
+  border: 2px solid #2a2a3a;
+  background: #18181f;
+  object-fit: contain;
+}
+
+.closet-card-body { padding: 10px 12px 12px; }
+
+.closet-card-type {
+  font-size: 0.875rem;
+  font-weight: 600;
+  color: #d0d0e8;
+  margin: 0 0 2px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  text-transform: capitalize;
+}
+
+.closet-card-brand {
+  font-size: 0.72rem;
+  font-weight: 500;
+  color: #7a72a8;
+  margin: 0 0 6px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.closet-card-match {
+  font-size: 0.75rem;
+  color: #70a070;
+  margin: 0 0 6px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.closet-card-tags {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+  margin-bottom: 8px;
+}
+
+.closet-tag-chip {
+  background: #22222e;
+  border: 1px solid #3a3a50;
+  border-radius: 20px;
+  padding: 2px 8px;
+  font-size: 0.72rem;
+  color: #8888b0;
+}
+
+.closet-card-actions {
+  display: flex;
+  gap: 6px;
+  justify-content: flex-end;
+}
+
+/* ── Match modal grid ────────────────────────────────────────────────────── */
+.match-modal { max-width: 700px; max-height: 80vh; overflow-y: auto; }
+
+.match-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(160px, 1fr));
+  gap: 12px;
+  margin-top: 12px;
+}
+
+.match-card {
+  background: #12121a;
+  border: 1px solid #2a2a3a;
+  border-radius: 10px;
+  overflow: hidden;
+  cursor: pointer;
+  transition: border-color 0.15s, transform 0.15s;
+}
+.match-card:hover { border-color: #7c5cbf; transform: translateY(-2px); }
+.match-card img { width: 100%; aspect-ratio: 1; object-fit: cover; }
+
+.match-info { padding: 8px; }
+.match-title { font-size: 0.78rem; font-weight: 600; color: #d0d0e8; margin: 0 0 3px; }
+.match-meta  { font-size: 0.72rem; color: #7070a0; margin: 0 0 2px; }
+.match-source{ font-size: 0.7rem; color: #555570; }
+
+/* ── Modal item icon ──────────────────────────────────────────────────────── */
+.modal-item-icon {
+  width: 80px;
+  height: 80px;
+  object-fit: contain;
+  border-radius: 10px;
+  border: 1px solid #2a2a3a;
+  margin-bottom: 16px;
+}
+
+/* ── Modal action row ─────────────────────────────────────────────────────── */
+.modal-action-row {
+  display: flex;
+  gap: 8px;
+  margin-top: 4px;
+  align-items: center;
+}
+
+.modal-action-hint {
+  font-size: 0.72rem;
+  color: #555570;
+  margin: 8px 0 0;
+  line-height: 1.5;
+}
+
+/* ── Empty state ──────────────────────────────────────────────────────────── */
+.closet-empty {
+  text-align: center;
+  color: #555;
+  padding: 60px 20px;
+  font-size: 1rem;
+}
+
+/* ── Item hover card (portal — position: fixed so no overflow clipping) ──── */
+.item-hover-card {
+  position: fixed;
+  z-index: 9999;
+  width: 252px;
+  background: #1a1a26;
+  border: 1px solid #4a3878;
+  border-radius: 14px;
+  padding: 14px;
+  box-shadow: 0 8px 32px rgba(0, 0, 0, 0.65);
+  pointer-events: none;
+  animation: ihcFadeIn 0.14s ease;
+}
+
+@keyframes ihcFadeIn {
+  from { opacity: 0; transform: translateY(4px); }
+  to   { opacity: 1; transform: translateY(0); }
+}
+
+.ihc-top {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  margin-bottom: 12px;
+}
+
+.ihc-icon {
+  width: 60px;
+  height: 60px;
+  object-fit: contain;
+  border-radius: 10px;
+  background: #12121a;
+  border: 1px solid #2a2a3a;
+  flex-shrink: 0;
+}
+
+.ihc-caption {
+  font-size: 0.78rem;
+  color: #c0c0d8;
+  line-height: 1.4;
+  margin: 0;
+  flex: 1;
+}
+
+.ihc-tag-grid {
+  display: grid;
+  grid-template-columns: auto 1fr;
+  gap: 3px 10px;
+  margin-bottom: 10px;
+}
+
+.ihc-tag-label {
+  font-size: 0.68rem;
+  font-weight: 600;
+  color: #7070a0;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  white-space: nowrap;
+}
+
+.ihc-tag-value {
+  font-size: 0.75rem;
+  color: #c9b8ff;
+  text-transform: capitalize;
+}
+
+.ihc-keywords {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+  padding-top: 8px;
+  border-top: 1px solid #2a2a35;
+}
+
+.ihc-keyword-chip {
+  background: #22203a;
+  border: 1px solid #3a3060;
+  border-radius: 20px;
+  padding: 2px 8px;
+  font-size: 0.65rem;
+  color: #a0a0c8;
+}

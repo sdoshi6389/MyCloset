@@ -1,0 +1,11 @@
+# Use the venv python
+python db_manager.py progress add   --date 2026-06-06 --tasks "Task A; Task B; Task C"
+python db_manager.py progress update --id 1 --tasks "Task A; Task B; Task C; Task D"
+python db_manager.py progress delete --id 1
+python db_manager.py progress list
+
+python db_manager.py bugs add    --found 2026-06-06 --desc "Description of the bug"
+python db_manager.py bugs fix    --id 1 --date 2026-06-063
+python db_manager.py bugs update --id 1 --desc "Updated description" --fixed 2026-06-06
+python db_manager.py bugs delete --id 1
+python db_manager.py bugs listdb

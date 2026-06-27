@@ -1,0 +1,169 @@
+/* ─── Drawer shell ──────────────────────────────────────────────────────── */
+.closet-drawer {
+  width: 240px;
+  flex-shrink: 0;
+  background: #080810;
+  border-right: 1px solid rgba(255, 255, 255, 0.034);
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+
+/* ─── Header ────────────────────────────────────────────────────────────── */
+.cd-header {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 22px 16px 14px;
+  border-bottom: 1px solid #101020;
+  flex-shrink: 0;
+}
+.cd-title {
+  font-size: 0.7rem;
+  font-weight: 700;
+  color: #a898d8;
+  text-transform: uppercase;
+  letter-spacing: 0.1em;
+}
+.cd-zone-badge {
+  font-size: 0.58rem;
+  color: #6650a8;
+  background: rgba(70, 46, 130, 0.22);
+  border: 1px solid rgba(70, 46, 130, 0.35);
+  border-radius: 20px;
+  padding: 2px 8px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  max-width: 118px;
+}
+
+/* ─── Zone nudge ────────────────────────────────────────────────────────── */
+.cd-needs-zone {
+  margin: 8px 12px 0;
+  background: rgba(76, 48, 148, 0.12);
+  border: 1px solid rgba(100, 68, 180, 0.18);
+  border-radius: 8px;
+  color: rgba(158, 128, 222, 0.72);
+  font-size: 0.63rem;
+  text-align: center;
+  padding: 7px 10px;
+  flex-shrink: 0;
+  animation: cdNudge 0.3s ease;
+}
+@keyframes cdNudge {
+  0%, 100% { transform: translateX(0); }
+  25%       { transform: translateX(-4px); }
+  75%       { transform: translateX(4px); }
+}
+
+/* ─── Search ────────────────────────────────────────────────────────────── */
+.cd-search-wrap {
+  padding: 10px 12px 6px;
+  flex-shrink: 0;
+}
+.cd-search {
+  width: 100%;
+  background: #0e0e1c;
+  border: 1px solid #1a1a2c;
+  border-radius: 8px;
+  color: #d0cce8;
+  font-size: 0.77rem;
+  padding: 7px 10px;
+  outline: none;
+  box-sizing: border-box;
+  transition: border-color 0.15s;
+}
+.cd-search:focus { border-color: #4a3280; }
+.cd-search::placeholder { color: #28283e; }
+
+/* ─── Tabs ──────────────────────────────────────────────────────────────── */
+.cd-tabs {
+  display: flex;
+  gap: 4px;
+  padding: 4px 12px 8px;
+  overflow-x: auto;
+  flex-shrink: 0;
+  scrollbar-width: none;
+}
+.cd-tabs::-webkit-scrollbar { display: none; }
+
+.cd-tab {
+  flex-shrink: 0;
+  background: transparent;
+  border: 1px solid #181828;
+  border-radius: 20px;
+  color: #3e3e58;
+  font-size: 0.61rem;
+  padding: 3px 10px;
+  cursor: pointer;
+  white-space: nowrap;
+  transition: all 0.12s;
+}
+.cd-tab:hover  { border-color: #362f58; color: #7070a8; }
+.cd-tab.active { background: #241b48; border-color: #5a3ea8; color: #c0a8ff; }
+
+/* ─── Item grid ─────────────────────────────────────────────────────────── */
+.cd-grid {
+  flex: 1;
+  overflow-y: auto;
+  display: grid;
+  grid-template-columns: repeat(2, 1fr);
+  gap: 6px;
+  padding: 6px 10px 16px;
+  align-content: start;
+  scrollbar-width: thin;
+  scrollbar-color: #151528 transparent;
+}
+.cd-grid::-webkit-scrollbar { width: 3px; }
+.cd-grid::-webkit-scrollbar-thumb { background: #1a1a2c; border-radius: 3px; }
+
+/* ─── Item tile ─────────────────────────────────────────────────────────── */
+.cd-item {
+  background: transparent;
+  border: 1px solid transparent;
+  border-radius: 10px;
+  padding: 0 0 4px;
+  cursor: pointer;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 3px;
+  overflow: hidden;
+  transition: all 0.14s;
+}
+.cd-item:hover {
+  border-color: #503890;
+  background: rgba(56, 36, 106, 0.16);
+  transform: scale(1.03);
+}
+
+.cd-img {
+  width: 100%;
+  aspect-ratio: 1;
+  object-fit: contain;
+  display: block;
+  filter: drop-shadow(0 2px 9px rgba(0, 0, 0, 0.68));
+  transition: filter 0.14s;
+}
+.cd-item:hover .cd-img {
+  filter: drop-shadow(0 5px 18px rgba(78, 48, 162, 0.48));
+}
+
+.cd-brand {
+  font-size: 0.56rem;
+  color: #44446a;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  max-width: 100%;
+  padding: 0 4px;
+}
+
+.cd-empty {
+  grid-column: 1 / -1;
+  text-align: center;
+  color: #28283e;
+  font-size: 0.73rem;
+  padding: 28px 0;
+}

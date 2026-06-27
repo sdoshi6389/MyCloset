@@ -1,0 +1,41 @@
+# Core web framework
+flask
+flask-cors
+
+# Database
+psycopg2-binary
+
+# Auth & security
+werkzeug
+pyjwt
+python-dotenv
+
+# ML / AI
+torch
+torchvision
+transformers
+faiss-cpu
+Pillow
+pillow-heif
+numpy
+opencv-python
+
+# OCR
+ultralytics
+easyocr
+realesrgan
+
+# Image processing
+rembg
+mediapipe
+
+# External APIs
+openai
+replicate
+
+# Scrapers (run separately)
+playwright
+requests
+beautifulsoup4
+pandas
+tqdm

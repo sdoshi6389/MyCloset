@@ -1,0 +1,21 @@
+6/5/26
+
+want to create a progress database:
+should have date, tasks completed (in a table format in vsc so prolly in a db file)
+
+want to create a bug database:
+date bug was found, what the bug was, date bug was fixed (in a table foramt in vsc so prolly in a db file)
+
+both of these databases should be modifiable via a command line command and there should be a script written for it which cna be run with the appropriate arguments to update the entry or make a new entry
+
+
+6/8/26
+
+get the outfit builder much better, use the prompt that gpt generated from my design - done
+
+get the database for products into supabase with all the existing scraped data in there already (will have to do it differently per brand based on what the scraper gives) - done
+
+run boohooman.py and uniqlo.py scraper under completed_scrapers
+
+problem: heic files are not accepted, need to fix this
+problem: need to expand search space to search embeddings for every table in product database (not sure if it is doing the searching with psg sql database or supabase, make sure it is doing with supabase)
