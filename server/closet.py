@@ -10,7 +10,7 @@ from callable_embedding import generate_clip_embedding, save_embedding_to_db
 from callable_faiss import search_similar_products
 import numpy as np
 from PIL import Image as _PILImage
-from replicate_icon_clothing import generate_icon_from_image
+from replicate_icon_clothing import generate_icon_from_image, retag_metadata_only
 
 try:
     from pillow_heif import register_heif_opener as _reg_heif
@@ -36,6 +36,16 @@ def get_user_id_from_token(request):
         print(f"Token error: {e}")
         return None
 
+def _serialize_item(item, user_id):
+    """Convert a closet_items DB row into a frontend-safe dict.
+    Replaces the raw vector_embedding (512 floats) with a bool so the
+    frontend can gate 'Find Match' without downloading KB of floats per card."""
+    item["url"] = f"/static/{user_id}/{item['filename']}"
+    item["tag"] = item.get("tag_text")
+    item["has_embedding"] = bool(item.pop("vector_embedding", None))
+    return item
+
+
 @closet_bp.route("/get_closet_images", methods=["GET"])
 def get_images():
     user_id = get_user_id_from_token(request)
@@ -43,18 +53,9 @@ def get_images():
         return jsonify({"message": "Unauthorized"}), 401
 
     supa = get_supa()
-    result = supa.table("closet_items").select(
-        "id, filename, filepath, tag_text, brand, size, category, tags, "
-        "matched_brand, matched_title, icon_path, caption, type, color, style, season, "
-        "fabric, vibe, keywords, emoticon_path"
-    ).eq("user_id", user_id).order("id").execute()
+    result = supa.table("closet_items").select(_ITEM_SELECT).eq("user_id", user_id).order("id").execute()
 
-    images = []
-    for item in result.data:
-        item["url"] = f"/static/{user_id}/{item['filename']}"
-        item["tag"] = item["tag_text"]
-        images.append(item)
-
+    images = [_serialize_item(item, user_id) for item in result.data]
     return jsonify(images), 200
 
 
@@ -125,7 +126,8 @@ MAX_FILES_PER_UPLOAD = 8
 _ITEM_SELECT = (
     "id, filename, filepath, tag_text, brand, size, category, tags, "
     "matched_brand, matched_title, icon_path, caption, type, color, style, season, "
-    "fabric, vibe, keywords, emoticon_path"
+    "fabric, vibe, keywords, emoticon_path, vector_embedding, "
+    "subcategory, layering_role, occasion, formality_score"
 )
 
 @closet_bp.route("/upload_closet_images", methods=["POST"])
@@ -200,10 +202,7 @@ def upload_images():
         # Return the full row so the frontend can render the card immediately
         item_res = supa.table("closet_items").select(_ITEM_SELECT).eq("user_id", user_id).eq("filename", filename).execute()
         if item_res.data:
-            item = item_res.data[0]
-            item["url"] = f"/static/{user_id}/{item['filename']}"
-            item["tag"] = item.get("tag_text")
-            uploaded_items.append(item)
+            uploaded_items.append(_serialize_item(item_res.data[0], user_id))
 
         if not has_icon:
             queued.append((filepath, filename, user_id, tag_text or ""))
@@ -283,6 +282,34 @@ def update_metadata():
         return jsonify({
             "message": "Metadata updated, but FAISS search failed"
         }), 500
+
+
+@closet_bp.route("/retag_metadata", methods=["POST"])
+def retag_metadata():
+    user_id = get_user_id_from_token(request)
+    if not user_id:
+        return jsonify({"message": "Unauthorized"}), 401
+
+    supa = get_supa()
+    result = supa.table("closet_items").select("filename, filepath, tag_text").eq("user_id", user_id).execute()
+
+    queued = 0
+    for row in result.data:
+        filepath = row.get("filepath")
+        filename = row.get("filename")
+        tag_text = row.get("tag_text") or ""
+        if not filepath or not os.path.isfile(filepath):
+            filepath = os.path.join(UPLOAD_FOLDER, str(user_id), filename) if filename else None
+        if filepath and os.path.isfile(filepath):
+            t = threading.Thread(
+                target=retag_metadata_only,
+                args=(filepath, user_id, filename, tag_text),
+                daemon=True,
+            )
+            t.start()
+            queued += 1
+
+    return jsonify({"message": f"Re-tagging {queued} item(s) in background.", "count": queued}), 202
 
 
 @closet_bp.route("/reprocess_icons", methods=["POST"])

@@ -25,19 +25,24 @@ def get_user_id_from_token(request):
 def _format_item(r, owner_user_id, owner_email, is_mine):
     icon_path = r.get("icon_path")
     return {
-        "id":            r["id"],
-        "filename":      r["filename"],
-        "brand":         r.get("brand"),
-        "title":         r.get("matched_title"),
-        "caption":       r.get("caption"),
-        "type":          r.get("type"),
-        "category":      r.get("category"),
-        "icon_url":      f"/icons/{os.path.basename(icon_path)}" if icon_path else None,
-        "image_url":     f"/static/{owner_user_id}/{r['filename']}",
-        "owner_user_id": owner_user_id,
-        "owner_email":   owner_email,
-        "owner_initial": (owner_email or "?")[0].upper(),
-        "is_mine":       is_mine,
+        "id":              r["id"],
+        "filename":        r["filename"],
+        "brand":           r.get("brand"),
+        "title":           r.get("matched_title"),
+        "caption":         r.get("caption"),
+        "type":            r.get("type"),
+        "category":        r.get("category"),
+        "vibe":            r.get("vibe"),
+        "style":           r.get("style"),
+        "season":          r.get("season"),
+        "formality_score": r.get("formality_score"),
+        "occasion":        r.get("occasion"),
+        "icon_url":        f"/icons/{os.path.basename(icon_path)}" if icon_path else None,
+        "image_url":       f"/static/{owner_user_id}/{r['filename']}",
+        "owner_user_id":   owner_user_id,
+        "owner_email":     owner_email,
+        "owner_initial":   (owner_email or "?")[0].upper(),
+        "is_mine":         is_mine,
     }
 
 
@@ -62,7 +67,7 @@ def get_closet_icons():
         users_map  = {u["id"]: u["email"] for u in users_res.data}
 
         result = supa.table("closet_items").select(
-            "id, filename, brand, matched_title, caption, type, category, icon_path, user_id"
+            "id, filename, brand, matched_title, caption, type, category, vibe, style, season, formality_score, occasion, icon_path, user_id"
         ).in_("user_id", member_ids).order("user_id").order("id", desc=True).execute()
 
         # Current user's items first, then other members' items
@@ -84,7 +89,7 @@ def get_closet_icons():
     filename = request.args.get("filename")
     if filename:
         result = supa.table("closet_items").select(
-            "id, filename, brand, matched_title, caption, type, category, icon_path"
+            "id, filename, brand, matched_title, caption, type, category, vibe, style, season, formality_score, occasion, icon_path"
         ).eq("user_id", user_id).eq("filename", filename).execute()
         rows = result.data
         if not rows:
@@ -93,7 +98,7 @@ def get_closet_icons():
         return jsonify(_format_item(r, user_id, "", True)), 200
 
     result = supa.table("closet_items").select(
-        "id, filename, brand, matched_title, caption, type, category, icon_path"
+        "id, filename, brand, matched_title, caption, type, category, vibe, style, season, formality_score, occasion, icon_path"
     ).eq("user_id", user_id).order("id", desc=True).execute()
 
     # Return all items — frontend uses image_url as fallback when icon_url is null

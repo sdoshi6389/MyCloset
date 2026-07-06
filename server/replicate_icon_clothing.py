@@ -101,9 +101,15 @@ Return the following JSON schema:
 
 Field Guidelines:
 
-category: top | bottom | outerwear | footwear | accessory
+category: top | bottom | outerwear | footwear | accessory | innerwear
 
-subcategory examples: hoodie, crewneck, polo, jeans, cargo_pants, shorts, sneakers, necklace
+subcategory — use EXACTLY one of the values listed below for the item's category:
+  top:       t-shirt | polo | henley | blouse | button_up | dress_shirt | turtleneck | sweater | cardigan | pullover | hoodie | sweatshirt | crop_top | tank_top | tube_top | jersey | flannel | graphic_tee | long_sleeve | knit_top
+  bottom:    jeans | cargo_pants | chinos | trousers | slacks | shorts | cargo_shorts | joggers | sweatpants | leggings | athletic_leggings | skirt | midi_skirt | mini_skirt | maxi_skirt | trackpants | romper | jumpsuit
+  outerwear: jacket | denim_jacket | leather_jacket | bomber | puffer | parka | trench_coat | blazer | windbreaker | raincoat | vest | fleece | varsity_jacket | overcoat
+  footwear:  sneakers | running_shoes | boots | sandals | heels | loafers | flats | slides | oxfords | trainers | mules | clogs | slippers
+  accessory: hat | cap | beanie | beret | sunglasses | glasses | necklace | chain | choker | bracelet | bangle | watch | belt | scarf | bandana | bag | backpack | tote | handbag | purse | crossbody | fanny_pack | ring | earrings | gloves
+  innerwear: undershirt | bra | bralette | sports_bra | camisole | boxers | briefs | boxer_briefs | thermal | tank_undershirt | bodysuit
 
 fit: slim | regular | relaxed | oversized | boxy | athletic
 
@@ -128,9 +134,12 @@ brand: Extract the brand name from any visible tag, label, logo, or text on the 
 
 compatible_styles: e.g. ["streetwear", "minimalist", "casual"]
 
-emoji_prompt: Generate a concise image-generation prompt describing ONLY this clothing item as a centered icon on a transparent background.
-Requirements: clothing item only, transparent background, no mannequin, no human, no text, no hanger, no shadows, front-facing, clean sticker style, high detail, isolated object.
-Example: "minimalist sticker icon of a navy blue oversized hoodie, front facing, transparent background, isolated clothing item, no mannequin, no human, clean vector style"
+emoji_prompt: Generate an instruction for an image-EDITING model that will be given THIS EXACT PHOTO as input (not a blank canvas). The instruction must tell the model to:
+(1) keep the actual garment exactly as shown — same color, pattern, print, logo, and fabric texture, with zero invented details,
+(2) completely remove everything else from the frame: the person wearing it, any mannequin, hangers, background, and shadows,
+(3) make the background fully transparent,
+(4) re-pose the garment into a flat, symmetrical, front-facing product-catalog presentation — as if laid flat or worn by an invisible ghost mannequin facing the camera straight-on — regardless of the angle, fold, twist, or wrinkle state it's photographed in.
+Example: "Using this exact photo, isolate only the navy blue oversized hoodie. Keep its exact color, print, and fabric texture unchanged. Remove the person, background, and all shadows. Make the background fully transparent. Re-pose the hoodie into a flat, front-facing, symmetrical product-catalog layout, as if laid flat or worn by an invisible mannequin facing forward, with sleeves and body straightened and uncreased."
 
 Return ONLY raw JSON.\
 """
@@ -161,8 +170,11 @@ TYPE_TO_CATEGORY = {
     "watch": "Accessories", "jewelry": "Accessories", "gloves": "Accessories",
     "beanie": "Accessories", "backpack": "Accessories", "tote": "Accessories",
     "handbag": "Accessories", "purse": "Accessories",
-    "underwear": "Innerwear", "bra": "Innerwear", "boxers": "Innerwear",
-    "briefs": "Innerwear", "sports bra": "Innerwear", "undershirt": "Innerwear",
+    "underwear": "Innerwear", "bra": "Innerwear", "bralette": "Innerwear",
+    "boxers": "Innerwear", "briefs": "Innerwear", "boxer briefs": "Innerwear",
+    "sports bra": "Innerwear", "undershirt": "Innerwear", "camisole": "Innerwear",
+    "cami": "Innerwear", "thermal": "Innerwear", "bodysuit": "Innerwear",
+    "tank undershirt": "Innerwear", "base layer": "Innerwear",
     "dress": "Tops", "midi dress": "Tops", "maxi dress": "Tops", "mini dress": "Tops",
     "athletic leggings": "Bottoms", "trackpant": "Bottoms", "track pants": "Bottoms",
 }
@@ -233,18 +245,54 @@ def analyze_image_with_gpt(image_path, tag_text=None):
 
 
 # === Step 2: GPT icon generation (transparent background) =======================
-def generate_icon_via_gpt(icon_prompt, output_dir="icon_outputs"):
+def generate_icon_via_gpt(icon_prompt, source_image_path=None, output_dir="icon_outputs"):
     """
-    Generate a clean transparent-background PNG icon for a clothing item.
-    Uses gpt-image-1 with background=transparent, falls back to dall-e-3.
-    Returns local file path or None.
+    Produce a clean transparent-background PNG icon for a clothing item.
+
+    Primary path: gpt-image-1's image-EDIT endpoint, given the actual source
+    photo with input_fidelity="high" — this preserves the real garment's
+    color/print/texture instead of hallucinating a generic illustration, while
+    the prompt still drives background removal and re-posing to a canonical
+    front-facing layout. Falls back to text-only generation (no real-photo
+    fidelity) if the edit call fails or no source photo is available, then to
+    dall-e-3 as a last resort.
     """
     client = openai.OpenAI(api_key=OPENAI_API_KEY)
     os.makedirs(output_dir, exist_ok=True)
     safe = icon_prompt[:60].replace(" ", "_").replace("/", "_").replace(":", "")
     out_path = os.path.join(output_dir, f"icon_{safe}.png")
 
-    # ── Try gpt-image-1 with transparent background ──────────────────────────
+    def _write_from_response(item, label):
+        b64 = getattr(item, "b64_json", None)
+        if b64:
+            img_bytes = base64.b64decode(b64)
+        elif getattr(item, "url", None):
+            img_bytes = requests.get(item.url, timeout=60).content
+        else:
+            raise ValueError(f"No image data in {label} response")
+        img = Image.open(BytesIO(img_bytes))
+        img.save(out_path, "PNG")
+        print(f"✅ {label} icon saved: {out_path}")
+        return out_path
+
+    # ── Try gpt-image-1 image-edit: extracts + re-poses the ACTUAL photo ─────
+    if source_image_path:
+        try:
+            with open(source_image_path, "rb") as img_file:
+                response = client.images.edit(
+                    model="gpt-image-1",
+                    image=img_file,
+                    prompt=icon_prompt,
+                    size="1024x1024",
+                    background="transparent",
+                    input_fidelity="high",
+                    n=1,
+                )
+            return _write_from_response(response.data[0], "gpt-image-1 edit (extracted from source photo)")
+        except Exception as e:
+            print(f"⚠️  gpt-image-1 edit failed ({type(e).__name__}): {e} — trying gpt-image-1 generate")
+
+    # ── Fallback: gpt-image-1 text-only generation (no source photo) ─────────
     try:
         response = client.images.generate(
             model="gpt-image-1",
@@ -253,23 +301,11 @@ def generate_icon_via_gpt(icon_prompt, output_dir="icon_outputs"):
             background="transparent",
             n=1,
         )
-        item = response.data[0]
-        b64 = getattr(item, "b64_json", None)
-        if b64:
-            img_bytes = base64.b64decode(b64)
-        elif getattr(item, "url", None):
-            img_bytes = requests.get(item.url, timeout=60).content
-        else:
-            raise ValueError("No image data in gpt-image-1 response")
-
-        img = Image.open(BytesIO(img_bytes))
-        img.save(out_path, "PNG")
-        print(f"✅ gpt-image-1 icon saved: {out_path}")
-        return out_path
+        return _write_from_response(response.data[0], "gpt-image-1 generate (no source extraction)")
     except Exception as e:
-        print(f"⚠️  gpt-image-1 failed ({type(e).__name__}): {e} — trying dall-e-3")
+        print(f"⚠️  gpt-image-1 generate failed ({type(e).__name__}): {e} — trying dall-e-3")
 
-    # ── Fallback: dall-e-3 (opaque, but clean illustration) ──────────────────
+    # ── Last resort: dall-e-3 (opaque, illustration only) ─────────────────────
     try:
         response = client.images.generate(
             model="dall-e-3",
@@ -282,7 +318,7 @@ def generate_icon_via_gpt(icon_prompt, output_dir="icon_outputs"):
         img_bytes = requests.get(item.url, timeout=60).content
         img = Image.open(BytesIO(img_bytes))
         img.save(out_path, "PNG")
-        print(f"✅ DALL-E 3 icon saved (opaque fallback): {out_path}")
+        print(f"✅ DALL-E 3 icon saved (opaque fallback, no source extraction): {out_path}")
         return out_path
     except Exception as e:
         print(f"⚠️  DALL-E 3 fallback failed ({type(e).__name__}): {e}")
@@ -300,17 +336,23 @@ def _serialize(val):
 
 # === Step 3: DB write ===========================================================
 def _save_to_db(user_id, filename, icon_path, gpt_tags, category):
-    caption   = gpt_tags.get("caption") or ""
-    back_tag  = gpt_tags.get("back_tag_text") or ""
-    brand     = gpt_tags.get("brand") or back_tag or "Unknown"
-    item_type = gpt_tags.get("type")
-    color     = gpt_tags.get("primary_color") or gpt_tags.get("color")
-    style     = _serialize(gpt_tags.get("style"))
-    season    = _serialize(gpt_tags.get("season"))
-    fabric    = gpt_tags.get("fabric")
-    vibe      = _serialize(gpt_tags.get("vibe"))
-    gender    = gpt_tags.get("gender")
-    keywords  = _serialize(gpt_tags.get("keywords"))
+    caption        = gpt_tags.get("caption") or ""
+    back_tag       = gpt_tags.get("back_tag_text") or ""
+    brand          = gpt_tags.get("brand") or back_tag or "Unknown"
+    item_type      = gpt_tags.get("type")
+    color          = gpt_tags.get("primary_color") or gpt_tags.get("color")
+    style          = _serialize(gpt_tags.get("style"))
+    season         = _serialize(gpt_tags.get("season"))
+    fabric         = gpt_tags.get("fabric")
+    vibe           = _serialize(gpt_tags.get("vibe"))
+    gender         = gpt_tags.get("gender")
+    keywords       = _serialize(gpt_tags.get("keywords"))
+    occasion       = _serialize(gpt_tags.get("occasion"))
+    subcategory    = gpt_tags.get("subcategory") or None
+    layering_role  = gpt_tags.get("layering_role") or None
+    formality_score = gpt_tags.get("formality_score")
+    if not isinstance(formality_score, int):
+        formality_score = None
 
     from db import get_supa
     supa = get_supa()
@@ -320,7 +362,7 @@ def _save_to_db(user_id, filename, icon_path, gpt_tags, category):
 
     # Fetch current row so we can COALESCE in Python (don't overwrite existing values)
     existing_res = supa.table("closet_items").select(
-        "icon_path, caption, brand, type, color, style, season, fabric, vibe, gender, keywords, category, matched_title"
+        "icon_path, caption, brand, type, color, style, season, fabric, vibe, gender, keywords, category, matched_title, occasion, formality_score, subcategory, layering_role"
     ).eq("user_id", user_id).eq("filename", filename).execute()
     ex = existing_res.data[0] if existing_res.data else {}
 
@@ -328,19 +370,23 @@ def _save_to_db(user_id, filename, icon_path, gpt_tags, category):
         return new_val if new_val else old_val
 
     supa.table("closet_items").update({
-        "icon_path":     _coalesce(icon_path,  ex.get("icon_path")),
-        "caption":       _coalesce(caption,    ex.get("caption")),
-        "brand":         _coalesce(brand,      ex.get("brand")),
-        "type":          _coalesce(item_type,  ex.get("type")),
-        "matched_title": _coalesce(item_name,  ex.get("matched_title")),
-        "color":         _coalesce(color,      ex.get("color")),
-        "style":         _coalesce(style,      ex.get("style")),
-        "season":        _coalesce(season,     ex.get("season")),
-        "fabric":        _coalesce(fabric,     ex.get("fabric")),
-        "vibe":          _coalesce(vibe,       ex.get("vibe")),
-        "gender":        _coalesce(gender,     ex.get("gender")),
-        "keywords":      _coalesce(keywords,   ex.get("keywords")),
-        "category":      _coalesce(category,   ex.get("category")),
+        "icon_path":      _coalesce(icon_path,       ex.get("icon_path")),
+        "caption":        _coalesce(caption,         ex.get("caption")),
+        "brand":          _coalesce(brand,           ex.get("brand")),
+        "type":           _coalesce(item_type,       ex.get("type")),
+        "matched_title":  _coalesce(item_name,       ex.get("matched_title")),
+        "color":          _coalesce(color,           ex.get("color")),
+        "style":          _coalesce(style,           ex.get("style")),
+        "season":         _coalesce(season,          ex.get("season")),
+        "fabric":         _coalesce(fabric,          ex.get("fabric")),
+        "vibe":           _coalesce(vibe,            ex.get("vibe")),
+        "gender":         _coalesce(gender,          ex.get("gender")),
+        "keywords":       _coalesce(keywords,        ex.get("keywords")),
+        "category":       _coalesce(category,        ex.get("category")),
+        "occasion":       _coalesce(occasion,        ex.get("occasion")),
+        "formality_score":_coalesce(formality_score, ex.get("formality_score")),
+        "subcategory":    _coalesce(subcategory,     ex.get("subcategory")),
+        "layering_role":  _coalesce(layering_role,   ex.get("layering_role")),
     }).eq("user_id", user_id).eq("filename", filename).execute()
 
 
@@ -429,14 +475,17 @@ def generate_icon_from_image(image_path, user_id, filename, tag_text=None, outpu
         caption = filename.rsplit(".", 1)[0].replace("_", " ").replace("-", " ").strip() or "clothing item"
 
     icon_prompt = emoji_prompt or (
-        f"Minimalist icon of {caption}, front-facing, transparent background, "
-        "isolated clothing item only, no mannequin, no human, no shadows, clean style"
+        f"Using this exact photo, isolate only the {caption}. Keep its exact color, pattern, "
+        "and fabric texture unchanged — do not invent new details. Remove the person, "
+        "background, and all shadows, and make the background fully transparent. Re-pose the "
+        "item into a flat, front-facing, symmetrical product-catalog layout, as if laid flat "
+        "or worn by an invisible mannequin facing forward, uncreased and straightened."
     )
 
     # ── Step 2: GPT icon generation (transparent background) ────────────────
     icon_path = None
     try:
-        icon_path = generate_icon_via_gpt(icon_prompt, output_dir)
+        icon_path = generate_icon_via_gpt(icon_prompt, image_path, output_dir)
         if icon_path:
             print(f"✅ Icon saved: {icon_path}")
         else:
@@ -466,3 +515,19 @@ def generate_icon_from_image(image_path, user_id, filename, tag_text=None, outpu
             print(f"⚠️  Emoji sticker failed ({type(e).__name__}): {e}")
 
     return icon_path
+
+
+def retag_metadata_only(image_path, user_id, filename, tag_text=None):
+    """
+    Re-runs only GPT-4o analysis + DB write — no icon generation.
+    Use this to backfill subcategory / layering_role on existing items.
+    """
+    try:
+        gpt_tags = analyze_image_with_gpt(image_path, tag_text=tag_text)
+        category = infer_category(gpt_tags.get("type"))
+        _save_to_db(user_id, filename, icon_path=None, gpt_tags=gpt_tags, category=category)
+        print(f"✅ Retag: {filename} → subcat={gpt_tags.get('subcategory')} layer={gpt_tags.get('layering_role')}")
+        return True
+    except Exception as e:
+        print(f"⚠️  Retag failed for {filename}: {e}")
+        return False

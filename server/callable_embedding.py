@@ -20,6 +20,15 @@ def generate_clip_embedding(image_path):
     embedding = embedding / embedding.norm()
     return embedding.cpu().tolist()
 
+def encode_text(text: str) -> list:
+    """CLIP text encoder — returns a 512-dim normalized embedding in the same space as image embeddings."""
+    inputs = processor(text=[text], return_tensors="pt", padding=True).to(device)
+    with torch.no_grad():
+        output = model.get_text_features(**inputs)
+    embedding = output[0]
+    embedding = embedding / embedding.norm()
+    return embedding.cpu().tolist()
+
 def save_embedding_to_db(user_id, filename, embedding):
     from db import get_supa
     filename = filename.lower()

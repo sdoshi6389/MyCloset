@@ -50,3 +50,6 @@ replicate_icon_clothing.py
 pip install replicate requests pillow
 
 pip install mediapipe rembg opencv-python pillow numpy
+
+pip install rembg onnxruntime
+

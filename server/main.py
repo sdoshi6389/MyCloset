@@ -10,6 +10,7 @@ from outfit_2d import outfit2d_bp
 from outfits import outfits_bp
 from circles import circles_bp
 from feed import feed_bp
+from recommend import recommend_bp
 import mimetypes
 import os
 import threading
@@ -78,17 +79,20 @@ app.register_blueprint(product_match_bp)
 app.register_blueprint(outfits_bp)     # /outfits
 app.register_blueprint(circles_bp)     # /circles
 app.register_blueprint(feed_bp)        # /feed
+app.register_blueprint(recommend_bp)   # /recommend
 
-def _warmup_faiss():
+def _start_faiss_worker():
+    # Lazy load: do NOT build/load the ~1GB+ FAISS index here. The watcher
+    # thread itself is cheap (just sleeps on an Event); the actual index
+    # only loads on the first call to search_similar_products(), which
+    # already guards itself with _ensure_index().
     try:
-        from callable_faiss import _ensure_index, start_background_worker
-        print("🔄 FAISS warmup starting in background…")
+        from callable_faiss import start_background_worker
         start_background_worker()
-        _ensure_index()
     except Exception as e:
-        print(f"⚠️  FAISS warmup failed: {e}")
+        print(f"⚠️  FAISS background worker failed to start: {e}")
 
-threading.Thread(target=_warmup_faiss, daemon=True, name="faiss-warmup").start()
+_start_faiss_worker()
 
 
 # ── Admin endpoints ───────────────────────────────────────────────────────────
@@ -110,4 +114,8 @@ def faiss_rebuild():
 
 
 if __name__ == "__main__":
-    app.run(port=5000, debug=True)
+    # use_reloader=False: the reloader runs two full processes and reloads
+    # the entire ML stack (torch/easyocr/CLIP/FAISS) on every file save —
+    # disabled to cut both baseline and restart-churn RAM. Debug error pages
+    # still work; you just need to restart manually after backend edits.
+    app.run(port=5000, debug=True, use_reloader=False)
