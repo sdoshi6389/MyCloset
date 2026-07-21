@@ -1,5 +1,6 @@
 from flask import Blueprint, request, jsonify, send_from_directory
 import os
+import re
 import jwt
 import threading
 from werkzeug.utils import secure_filename
@@ -17,6 +18,58 @@ try:
     _reg_heif()
 except Exception:
     pass
+
+
+def _blend_text_query(image_emb: np.ndarray, name: str | None, row: dict,
+                      text_weight: float = 0.35) -> np.ndarray:
+    """
+    Blend a CLIP image embedding with a CLIP text embedding built from the
+    item's metadata.  This steers the search toward the right color/category
+    without needing to regenerate any stored embeddings.
+
+    text_weight=0.35 means 65% visual + 35% text signal.
+    Falls back to pure image embedding if no useful text is available.
+    """
+    from callable_embedding import encode_text
+
+    # Build description from best available metadata, most specific first.
+    parts = []
+    item_name = (name or row.get("matched_title") or "").strip()
+    if item_name:
+        parts.append(item_name)
+
+    for field in ("color", "sub_category", "subcategory", "category"):
+        val = (row.get(field) or "").strip()
+        if val and val.lower() not in " ".join(parts).lower():
+            parts.append(val)
+
+    if not parts:
+        return image_emb
+
+    desc = " ".join(parts[:4])
+    print(f"Text-guided FAISS query: '{desc}'")
+
+    try:
+        text_emb = np.array(encode_text(desc), dtype=np.float32)
+        img_norm  = image_emb / (np.linalg.norm(image_emb) + 1e-9)
+        txt_norm  = text_emb  / (np.linalg.norm(text_emb)  + 1e-9)
+        blended   = (1 - text_weight) * img_norm + text_weight * txt_norm
+        return blended / (np.linalg.norm(blended) + 1e-9)
+    except Exception as e:
+        print(f"Text blend failed ({e}) — using image only")
+        return image_emb
+
+
+def _detect_gender(text: str) -> str | None:
+    """Return 'womens' or 'mens' if detected in text, else None.
+    Check womens first because 'men' is a substring of 'women'."""
+    t = text.lower()
+    if re.search(r"\b(women|womens|womenswear|women's|female|girls?|ladies)\b", t):
+        return "womens"
+    if re.search(r"\b(men|mens|menswear|men's|male|boys?)\b", t):
+        return "mens"
+    return None
+
 
 closet_bp = Blueprint("closet", __name__)
 
@@ -263,14 +316,17 @@ def update_metadata():
         return jsonify({"message": "Saved"}), 200
 
     try:
-        result = supa.table("closet_items").select("vector_embedding").eq("user_id", user_id).eq("filename", filename).execute()
+        result = supa.table("closet_items").select("*").eq("user_id", user_id).eq("filename", filename).execute()
         row = result.data[0] if result.data else None
         if not row or row["vector_embedding"] is None:
             return jsonify({"message": "Metadata updated, but embedding is missing"}), 500
 
-        embedding = np.array(row["vector_embedding"], dtype=np.float32)
-        matches = search_similar_products(embedding, brand)
-        print(f"matches: {matches}")
+        image_emb = np.array(row["vector_embedding"], dtype=np.float32)
+        query_emb = _blend_text_query(image_emb, name, row)
+
+        gender_text = " ".join(filter(None, [name, row.get("subcategory"), row.get("matched_title")]))
+        gender  = _detect_gender(gender_text)
+        matches = search_similar_products(query_emb, brand, gender=gender)
 
         return jsonify({
             "message": "Metadata updated",
@@ -341,6 +397,35 @@ def reprocess_icons():
                 queued += 1
 
     return jsonify({"message": f"Reprocessing {queued} item(s) in background.", "count": queued}), 202
+
+
+@closet_bp.route("/faiss_text_search", methods=["POST"])
+def faiss_text_search():
+    user_id = get_user_id_from_token(request)
+    if not user_id:
+        return jsonify({"message": "Unauthorized"}), 401
+
+    data        = request.json
+    filename    = data.get("filename")
+    search_text = (data.get("search_text") or "").strip()
+    brand       = data.get("brand") or None
+
+    if not filename or not search_text:
+        return jsonify({"message": "filename and search_text required"}), 400
+
+    supa   = get_supa()
+    result = supa.table("closet_items").select("vector_embedding").eq("user_id", user_id).eq("filename", filename).execute()
+    row    = result.data[0] if result.data else None
+    if not row or row.get("vector_embedding") is None:
+        return jsonify({"message": "No embedding found for this item"}), 404
+
+    image_emb = np.array(row["vector_embedding"], dtype=np.float32)
+    # Use higher text weight (0.5) since the user explicitly typed this query.
+    query_emb = _blend_text_query(image_emb, search_text, {}, text_weight=0.5)
+    gender    = _detect_gender(search_text)
+    matches   = search_similar_products(query_emb, brand, gender=gender)
+
+    return jsonify({"matches": matches}), 200
 
 
 @closet_bp.route("/save_match_selection", methods=["POST"])

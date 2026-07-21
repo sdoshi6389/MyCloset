@@ -14,6 +14,7 @@ import json
 import base64
 from PIL import Image
 from io import BytesIO
+from cost_log import log_chat_cost, log_image_cost
 
 try:
     from config import OPENAI_API_KEY as _CFG_OAK
@@ -235,6 +236,7 @@ def analyze_image_with_gpt(image_path, tag_text=None):
         max_tokens=1500,
     )
 
+    log_chat_cost("gpt-4o", response.usage, context=os.path.basename(image_path))
     text = response.choices[0].message.content.strip()
     if text.startswith("```"):
         text = text.split("```")[1]
@@ -288,6 +290,7 @@ def generate_icon_via_gpt(icon_prompt, source_image_path=None, output_dir="icon_
                     input_fidelity="high",
                     n=1,
                 )
+            log_image_cost("gpt-image-1", size="1024x1024", fidelity="high", call_type="image_edit", context=os.path.basename(source_image_path or ""))
             return _write_from_response(response.data[0], "gpt-image-1 edit (extracted from source photo)")
         except Exception as e:
             print(f"⚠️  gpt-image-1 edit failed ({type(e).__name__}): {e} — trying gpt-image-1 generate")
@@ -301,6 +304,7 @@ def generate_icon_via_gpt(icon_prompt, source_image_path=None, output_dir="icon_
             background="transparent",
             n=1,
         )
+        log_image_cost("gpt-image-1", size="1024x1024", fidelity=None, call_type="image_generate", context="icon_fallback")
         return _write_from_response(response.data[0], "gpt-image-1 generate (no source extraction)")
     except Exception as e:
         print(f"⚠️  gpt-image-1 generate failed ({type(e).__name__}): {e} — trying dall-e-3")
@@ -317,6 +321,7 @@ def generate_icon_via_gpt(icon_prompt, source_image_path=None, output_dir="icon_
         item = response.data[0]
         img_bytes = requests.get(item.url, timeout=60).content
         img = Image.open(BytesIO(img_bytes))
+        log_image_cost("dall-e-3", size="1024x1024", fidelity=None, call_type="image_generate", context="icon_fallback_dalle3")
         img.save(out_path, "PNG")
         print(f"✅ DALL-E 3 icon saved (opaque fallback, no source extraction): {out_path}")
         return out_path
@@ -390,49 +395,6 @@ def _save_to_db(user_id, filename, icon_path, gpt_tags, category):
     }).eq("user_id", user_id).eq("filename", filename).execute()
 
 
-# === Step 4: Emoji sticker (bonus, separate emoticon_path) ======================
-def generate_emoji_via_dalle(emoji_prompt, output_dir="emoji_outputs"):
-    """
-    Generate an emoji sticker via gpt-image-1 → dall-e-3 → dall-e-2 fallback chain.
-    Returns local file path or None.
-    """
-    client = openai.OpenAI(api_key=OPENAI_API_KEY)
-    os.makedirs(output_dir, exist_ok=True)
-    safe = emoji_prompt[:50].replace(" ", "_").replace("/", "_").replace(":", "")
-    out_path = os.path.join(output_dir, f"emoji_{safe}.png")
-
-    models = [
-        ("gpt-image-1", {"size": "1024x1024", "background": "transparent"}),
-        ("dall-e-3",    {"size": "1024x1024", "quality": "standard", "n": 1}),
-        ("dall-e-2",    {"size": "1024x1024", "n": 1}),
-    ]
-
-    for model, kwargs in models:
-        try:
-            response = client.images.generate(model=model, prompt=emoji_prompt, **kwargs)
-            print(f"✅ Emoji model used: {model}")
-            item = response.data[0]
-            b64 = getattr(item, "b64_json", None)
-            if b64:
-                img_bytes = base64.b64decode(b64)
-            else:
-                img_bytes = requests.get(item.url, timeout=60).content
-
-            img = Image.open(BytesIO(img_bytes))
-            img.save(out_path, "PNG")
-            return out_path
-        except Exception as e:
-            print(f"⚠️  {model} failed: {e} — trying next")
-
-    print("❌ All emoji generation models failed.")
-    return None
-
-
-def _save_emoticon_to_db(user_id, filename, emoticon_path):
-    from db import get_supa
-    get_supa().table("closet_items").update({
-        "emoticon_path": emoticon_path,
-    }).eq("user_id", user_id).eq("filename", filename).execute()
 
 
 # === Main entry point ============================================================
@@ -503,16 +465,6 @@ def generate_icon_from_image(image_path, user_id, filename, tag_text=None, outpu
             print(f"✅ Icon path saved to DB")
         except Exception as e:
             print(f"❌ Icon DB update failed: {e}")
-
-    # ── Step 4: Emoji sticker (bonus) ────────────────────────────────────────
-    if emoji_prompt:
-        try:
-            emoticon_path = generate_emoji_via_dalle(emoji_prompt, output_dir="emoji_outputs")
-            if emoticon_path:
-                _save_emoticon_to_db(user_id, filename, emoticon_path)
-                print(f"✅ Emoji sticker saved: {emoticon_path}")
-        except Exception as e:
-            print(f"⚠️  Emoji sticker failed ({type(e).__name__}): {e}")
 
     return icon_path
 

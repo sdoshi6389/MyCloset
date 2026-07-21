@@ -34,12 +34,19 @@ def create():
     tags       = data.get("tags")
     notes      = data.get("notes")
     is_private = bool(data.get("is_private", False))
-    slots      = data.get("slots", {})
 
     outfit_id = create_outfit(user_id, name, occasion, tags, notes, is_private)
-    pairs = [(slot, item_id) for slot, item_id in slots.items() if item_id is not None]
-    if pairs:
-        save_outfit_items(outfit_id, pairs)
+
+    items = data.get("items", [])
+    # Backward compat: old clients sent { slots: { slot: closet_item_id } }
+    if not items:
+        slots = data.get("slots", {})
+        items = [
+            {"slot": s, "closet_item_id": cid, "catalog_data": None, "nudge_x": 0, "nudge_y": 0}
+            for s, cid in slots.items() if cid is not None
+        ]
+    if items:
+        save_outfit_items(outfit_id, items)
 
     return jsonify({"id": outfit_id, "message": "Outfit saved"}), 201
 

@@ -39,7 +39,7 @@ from db import get_supa
 from config import SUPABASE_URL, SUPABASE_SERVICE_KEY
 
 # ── Config ─────────────────────────────────────────────────────────────────────
-TOP_K                 = 5
+TOP_K                 = 40
 REBUILD_COOLDOWN_SECS = 15 * 60   # 15 minutes
 STORAGE_BUCKET        = "faiss-cache"
 
@@ -58,15 +58,141 @@ _LOCK:           threading.Lock  = threading.Lock()
 _REBUILD_NEEDED: threading.Event = threading.Event()
 
 # ── Brand normalisation ────────────────────────────────────────────────────────
-BRAND_ALIASES = {
-    "gymshark": "gymshark", "hollister": "hollister",
-    "essentials": "essentials", "fear of god": "essentials",
-    "h&m": "h&m", "hm": "h&m",
-    "cotton on": "cotton on", "cottonon": "cotton on",
-    "abercrombie": "abercrombie", "a&f": "abercrombie",
+# Maps every reasonable user-facing brand string → canonical name.
+# Canonical name must match what _table_to_brand returns for that brand's table.
+BRAND_ALIASES: dict[str, str] = {
+    # Alo
     "alo": "alo", "alo yoga": "alo",
-    "romwe": "romwe", "aritzia": "aritzia", "zara": "zara",
-    "urban outfitters": "urban_outfitters",
+    # Hollister
+    "hollister": "hollister", "hollister co": "hollister",
+    # Gymshark
+    "gymshark": "gymshark",
+    # Essentials / Fear of God
+    "essentials": "essentials", "fear of god": "essentials", "fog essentials": "essentials",
+    # H&M
+    "h&m": "h&m", "hm": "h&m", "h and m": "h&m",
+    # Cotton On
+    "cotton on": "cotton on", "cottonon": "cotton on",
+    # Abercrombie
+    "abercrombie": "abercrombie", "a&f": "abercrombie", "abercrombie and fitch": "abercrombie",
+    # Zara
+    "zara": "zara",
+    # Urban Outfitters
+    "urban outfitters": "urban_outfitters", "uo": "urban_outfitters",
+    # Nike
+    "nike": "nike",
+    # Forever 21
+    "forever 21": "forever21", "forever21": "forever21", "f21": "forever21",
+    # Uniqlo
+    "uniqlo": "uniqlo",
+    # American Eagle
+    "american eagle": "americaneagle", "americaneagle": "americaneagle", "ae outfitters": "americaneagle",
+    # Aritzia
+    "aritzia": "aritzia",
+    # Romwe
+    "romwe": "romwe",
+    # Madewell
+    "madewell": "madewell",
+    # J.Crew
+    "j crew": "jcrew", "j.crew": "jcrew", "jcrew": "jcrew",
+    # Gap
+    "gap": "gap",
+    # Banana Republic
+    "banana republic": "bananarepublic", "bananarepublic": "bananarepublic",
+    # Calvin Klein
+    "calvin klein": "calvinklein", "ck": "calvinklein",
+    # Tommy Hilfiger
+    "tommy hilfiger": "tommyhilfiger", "tommy": "tommyhilfiger",
+    # Puma
+    "puma": "puma",
+    # Under Armour
+    "under armour": "underarmour", "underarmour": "underarmour",
+    # Vans
+    "vans": "vans",
+    # Carhartt
+    "carhartt": "carhartt",
+    # Champion
+    "champion": "champion",
+    # Stussy
+    "stussy": "stussy",
+    # Supreme
+    "supreme": "supreme",
+    # North Face
+    "north face": "northface", "the north face": "northface",
+    # Shein
+    "shein": "shein",
+    # Express
+    "express": "express",
+    # Reformation
+    "reformation": "reformation",
+    # Revolve
+    "revolve": "revolve",
+    # Princess Polly
+    "princess polly": "princesspolly", "princesspolly": "princesspolly",
+    # Pretty Little Thing
+    "pretty little thing": "prettylittlething", "plt": "prettylittlething",
+    # Nasty Gal
+    "nasty gal": "nastygal", "nastygal": "nastygal",
+    # Brandy Melville
+    "brandy melville": "brandy_melville", "brandy": "brandy_melville",
+    # Club Monaco
+    "club monaco": "clubmonaco",
+    # Tory Burch
+    "tory burch": "toryburch",
+    # Michael Kors
+    "michael kors": "michaelkors",
+    # Kate Spade
+    "kate spade": "katespade",
+    # Bape
+    "bape": "bape", "a bathing ape": "bape",
+    # Vuori
+    "vuori": "vuori",
+    # Outdoor Voices
+    "outdoor voices": "outdoorvoices",
+    # BooHooMAN
+    "boohooman": "boohooman", "boohoo man": "boohooman",
+    # Kith
+    "kith": "kith",
+    # ASSC
+    "assc": "assc", "anti social social club": "assc",
+    # Madhappy
+    "madhappy": "madhappy",
+    # Corteiz
+    "corteiz": "corteiz",
+    # Noah
+    "noah": "noah",
+    # Brain Dead
+    "brain dead": "braindead", "braindead": "braindead",
+    # Dickies
+    "dickies": "dickies",
+    # Good American
+    "good american": "goodamerican",
+    # Lounge
+    "lounge": "lounge",
+    # Meshki
+    "meshki": "meshki",
+    # Edikted
+    "edikted": "edikted",
+    # Dolls Kill
+    "dolls kill": "dollskill",
+    # Primark
+    "primark": "primark",
+    # Young LA
+    "young la": "youngla", "youngla": "youngla",
+    # Coofandy
+    "coofandy": "coofandy",
+    # With Jean
+    "with jean": "withjean",
+    # IAM GIA
+    "iam gia": "iamgia", "iamgia": "iamgia",
+    # Revice
+    "revice": "revice",
+    # Awakeny
+    "awakeny": "awakeny",
+    # Eric Emanuel
+    "eric emanuel": "ericemanuel",
+    # Good American
+    "goodamerican": "goodamerican",
 }
 
 def _resolve_brand(brand: str | None) -> str | None:
@@ -78,8 +204,95 @@ def _resolve_brand(brand: str | None) -> str | None:
             return canonical
     return None
 
+# Gendered and otherwise split tables that share one canonical brand name.
+# Canonical must match the value returned for single-table brands (table suffix).
+_TABLE_BRAND_OVERRIDES = {
+    "alo_womens":              "alo",
+    "alo_mens":                "alo",
+    "abercrombie_mens":        "abercrombie",
+    "abercrombie_womens":      "abercrombie",
+    "cottonon_mens":           "cotton on",
+    "cottonon_womens":         "cotton on",
+    "essentials_mens":         "essentials",
+    "essentials_womens":       "essentials",
+    "forever21_mens":          "forever21",
+    "forever21_womens":        "forever21",
+    "gymshark_mens":           "gymshark",
+    "gymshark_womens":         "gymshark",
+    "hm_mens":                 "h&m",
+    "hm_womens":               "h&m",
+    "hollister_mens":          "hollister",
+    "hollister_womens":        "hollister",
+    "nike_mens":               "nike",
+    "nike_womens":             "nike",
+    "uniqlo_mens":             "uniqlo",
+    "uniqlo_womens":           "uniqlo",
+    "urban_outfitters_womens": "urban_outfitters",
+    "zara_mens":               "zara",
+    "zara_womens":             "zara",
+}
+
 def _table_to_brand(table: str) -> str:
-    return table.removeprefix("products_")
+    suffix = table.removeprefix("products_")
+    return _TABLE_BRAND_OVERRIDES.get(suffix, suffix)
+
+
+import re as _re
+
+# Keywords that appear IN TITLES and signal one gender.
+# Checked in order: womens first (so "women" in "womenswear" doesn't get hit by "men").
+_FEMALE_TITLE_RE = _re.compile(
+    r"\b(women|womens|woman|womenswear|women's|female|ladies|girl|girls|"
+    r"dress|skirt|midi\s+skirt|maxi\s+skirt|blouse|"
+    r"bralette|sports\s*bra|\bbra\b|"
+    r"heel|pump|mule|wedge|stiletto|"
+    r"cami|camisole|romper|jumpsuit|bodycon|"
+    r"crop\s+top|tube\s+top|off.?shoulder)\b",
+    _re.IGNORECASE
+)
+_MALE_TITLE_RE = _re.compile(
+    r"\b(men|mens|menswear|men's|male|boys?|"
+    r"boxer|briefs|boxer.brief)\b",
+    _re.IGNORECASE
+)
+
+
+def _gender_from_name(name: str) -> str | None:
+    """
+    Infer gender from a table name, brand name, or product title.
+    Checks anywhere in the string (not just suffix), womens wins if both match.
+    """
+    n = name.lower()
+    if _re.search(r"women|womans|womens|womenswear|woman", n):
+        return "womens"
+    if _re.search(r"\bmen\b|mens|menswear|male", n):
+        return "mens"
+    if n.endswith(("_womens", "_women")):
+        return "womens"
+    if n.endswith(("_mens", "_men")):
+        return "mens"
+    return None
+
+
+def _gender_from_title(title: str) -> str | None:
+    """Infer gender from product title keywords."""
+    if not title:
+        return None
+    if _FEMALE_TITLE_RE.search(title):
+        return "womens"
+    if _MALE_TITLE_RE.search(title):
+        return "mens"
+    return None
+
+
+def _gender_from_table(table: str) -> str | None:
+    """Derive gender from table name — checks anywhere in the name, not just suffix."""
+    return _gender_from_name(table)
+
+
+def _gender_from_source(source: str) -> str | None:
+    """Infer gender from the source/brand string stored in meta."""
+    return _gender_from_name(source)
 
 
 # ── Table discovery ────────────────────────────────────────────────────────────
@@ -201,7 +414,7 @@ def _load_from_disk() -> None:
     _MEM["meta"]       = meta
     _MEM["embeddings"] = vecs
     src = "disk+embeddings" if vecs is not None else "disk (no embeddings file)"
-    print(f"✅ FAISS loaded from {src} — {len(meta)} vectors")
+    print(f"[OK] FAISS loaded from {src} - {len(meta)} vectors")
 
 
 # ── Embedding column detection ─────────────────────────────────────────────────
@@ -220,6 +433,21 @@ def _detect_embedding_col(row: dict) -> str | None:
     return None
 
 
+def _parse_emb(val) -> list | None:
+    """Parse an embedding value that may come back as a JSON string or a list."""
+    if val is None:
+        return None
+    if isinstance(val, str):
+        import json as _json
+        return _json.loads(val)
+    return val
+
+
+# Tables that use per-image embeddings from product_image_embeddings
+# instead of (or in addition to) combined_embedding per product row.
+_MULTI_IMAGE_TABLES: set[str] = {"products_alo_womens", "products_alo_mens"}
+
+
 # ── Fetch + build ──────────────────────────────────────────────────────────────
 def _fetch_all_products(tables: list[str]) -> tuple[list, list]:
     supa = get_supa()
@@ -229,6 +457,7 @@ def _fetch_all_products(tables: list[str]) -> tuple[list, list]:
 
     for table in tables:
         brand   = _table_to_brand(table)
+        gender  = _gender_from_table(table)
         offset  = 0
         emb_col = None
         print(f"  loading {table}…")
@@ -251,7 +480,7 @@ def _fetch_all_products(tables: list[str]) -> tuple[list, list]:
                 print(f"    column: '{emb_col}'")
 
             for row in rows:
-                emb = row.get(emb_col)
+                emb = _parse_emb(row.get(emb_col))
                 if emb is None:
                     continue
                 vecs.append(np.array(emb, dtype=np.float32))
@@ -263,6 +492,7 @@ def _fetch_all_products(tables: list[str]) -> tuple[list, list]:
                     "url":    row.get("url", ""),
                     "image":  row.get("image", ""),
                     "source": brand,
+                    "gender": row.get("gender") or gender,  # prefer DB value over table-name inference
                 })
 
             if len(rows) < PAGE:
@@ -270,6 +500,75 @@ def _fetch_all_products(tables: list[str]) -> tuple[list, list]:
             offset += PAGE
 
         print(f"    → {len(meta)} rows so far")
+
+    # ── Multi-image embeddings from product_image_embeddings ──────────────────
+    # For alo (and any future _MULTI_IMAGE_TABLES), we also load one vector per
+    # product image.  These overlap with the combined_embedding entries above;
+    # _run_search deduplicates by (source, product_id) keeping the best match.
+    for table in [t for t in tables if t in _MULTI_IMAGE_TABLES]:
+        brand  = _table_to_brand(table)
+        gender = _gender_from_table(table)
+        print(f"  loading product_image_embeddings for {table}…")
+
+        # Build product-id → metadata lookup (one query)
+        prod_meta: dict[int, dict] = {}
+        off = 0
+        while True:
+            try:
+                res = (supa.table(table)
+                       .select("id,title,price,color,url,image")
+                       .range(off, off + PAGE - 1)
+                       .execute())
+            except Exception as e:
+                print(f"  ⚠️  error reading {table} metadata: {e}")
+                break
+            for r in (res.data or []):
+                prod_meta[r["id"]] = r
+            if len(res.data or []) < PAGE:
+                break
+            off += PAGE
+
+        if not prod_meta:
+            print(f"    no products found — skipping image embeddings")
+            continue
+
+        # Load per-image embeddings
+        off = 0
+        n_img = 0
+        while True:
+            try:
+                res = (supa.table("product_image_embeddings")
+                       .select("product_id,image_url,embedding")
+                       .eq("source_table", table)
+                       .range(off, off + PAGE - 1)
+                       .execute())
+            except Exception as e:
+                print(f"  ⚠️  error reading product_image_embeddings for {table}: {e}")
+                break
+            rows = res.data or []
+            for row in rows:
+                emb = _parse_emb(row.get("embedding"))
+                if emb is None:
+                    continue
+                pm = prod_meta.get(row["product_id"], {})
+                vecs.append(np.array(emb, dtype=np.float32))
+                meta.append({
+                    "id":     pm.get("id"),
+                    "title":  pm.get("title", ""),
+                    "price":  pm.get("price", ""),
+                    "color":  pm.get("color", ""),
+                    "url":    pm.get("url", ""),
+                    "image":  pm.get("image", "") or row.get("image_url", ""),
+                    "source": brand,
+                    "gender": gender,
+                })
+                n_img += 1
+            if len(rows) < PAGE:
+                break
+            off += PAGE
+
+        print(f"    → {n_img} image-level vectors added")
+
     return vecs, meta
 
 
@@ -428,7 +727,15 @@ def _brand_sub_index(canonical_brand: str):
     index = _MEM["index"]
     vecs  = _MEM["embeddings"]
 
-    idxs = [i for i, m in enumerate(meta) if m["source"] == canonical_brand]
+    # Accept both the canonical name (indexes built after the fix) AND every
+    # table-derived suffix that maps to this canonical (indexes built before,
+    # where source was stored as e.g. "hollister_mens" instead of "hollister").
+    matching_sources = {canonical_brand}
+    for suffix, brand in _TABLE_BRAND_OVERRIDES.items():
+        if brand == canonical_brand:
+            matching_sources.add(suffix)
+
+    idxs = [i for i, m in enumerate(meta) if m["source"] in matching_sources]
     if not idxs:
         return None, None
 
@@ -445,17 +752,47 @@ def _brand_sub_index(canonical_brand: str):
 
 
 # ── Search ─────────────────────────────────────────────────────────────────────
-def _run_search(qv, index, meta: list) -> list:
-    qv   = np.array(qv, dtype=np.float32).reshape(1, -1)
-    k    = min(TOP_K, len(meta))
-    D, I = index.search(qv, k)
-    return [
-        {**dict(meta[i]), "distance": float(d)}
-        for d, i in zip(D[0], I[0])
-    ]
+def _run_search(qv, index, meta: list, top_k: int = TOP_K) -> list:
+    qv = np.array(qv, dtype=np.float32).reshape(1, -1)
+    # Fetch more candidates than needed so deduplication still yields top_k results.
+    fetch_k = min(top_k * 4, len(meta))
+    D, I    = index.search(qv, fetch_k)
+
+    # Deduplicate: keep the closest (lowest L2 distance) entry per product.
+    # Key is (source, product_id) — products that appear multiple times in the
+    # index (once per image from product_image_embeddings) collapse to one result.
+    best: dict = {}
+    for d, i in zip(D[0], I[0]):
+        m    = meta[i]
+        key  = (m.get("source"), m.get("id") or m.get("url", ""))
+        dist = float(d)
+        if key not in best or dist < best[key]["distance"]:
+            best[key] = {**dict(m), "distance": dist}
+
+    return sorted(best.values(), key=lambda r: r["distance"])[:top_k]
 
 
-def search_similar_products(query_vector, brand: str | None = None) -> list:
+def _item_gender(r: dict) -> str | None:
+    """
+    Gender of a search result.
+    Priority: explicit gender field → source/brand name → product title keywords.
+    """
+    explicit = r.get("gender") or _gender_from_source(r.get("source", ""))
+    if explicit:
+        return explicit
+    return _gender_from_title(r.get("title", ""))
+
+
+def _filter_by_gender(results: list, gender: str | None) -> list:
+    """Keep only results matching gender (or with no gender tag). No fallback — empty is correct."""
+    if not gender:
+        return results
+    return [r for r in results if _item_gender(r) in (gender, None)]
+
+
+def search_similar_products(query_vector, brand: str | None = None,
+                            gender: str | None = None,
+                            top_k: int = TOP_K) -> list:
     if not _ensure_index():
         return []
 
@@ -463,12 +800,12 @@ def search_similar_products(query_vector, brand: str | None = None) -> list:
     if canonical:
         sub_idx, sub_meta = _brand_sub_index(canonical)
         if sub_idx is not None:
-            print(f"🔍 Brand search: '{canonical}' ({len(sub_meta)} products)")
-            return _run_search(query_vector, sub_idx, sub_meta)
+            print(f"🔍 Brand search: '{canonical}' ({len(sub_meta)} products), gender={gender}, top_k={top_k}")
+            return _filter_by_gender(_run_search(query_vector, sub_idx, sub_meta, top_k), gender)
         print(f"⚠️  No '{canonical}' products — falling back to full catalog")
 
-    print(f"🔍 Full-catalog search ({len(_MEM['meta'])} products)")
-    return _run_search(query_vector, _MEM["index"], _MEM["meta"])
+    print(f"🔍 Full-catalog search ({len(_MEM['meta'])} products), gender={gender}, top_k={top_k}")
+    return _filter_by_gender(_run_search(query_vector, _MEM["index"], _MEM["meta"], top_k), gender)
 
 
 # ── CLI ────────────────────────────────────────────────────────────────────────

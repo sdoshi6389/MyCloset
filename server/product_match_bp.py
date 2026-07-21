@@ -32,17 +32,35 @@ def _post_callback(job_id: str, payload: dict):
         print(f"Callback POST failed for job {job_id}: {e}")
 
 
+def _strip_bg(raw: bytes) -> bytes:
+    """Remove background via rembg; falls back to original if result is blank."""
+    try:
+        from bg_remove import _remove_background
+        from PIL import Image
+        import io
+        result = _remove_background(raw)
+        img = Image.open(io.BytesIO(result)).convert("RGBA")
+        if sum(p[3] for p in img.getdata()) > 0:
+            return result
+        print("BG removal returned blank — using original")
+    except Exception as e:
+        print(f"BG removal failed ({e}) — using original")
+    return raw
+
+
 def _run_job(job_id: str, image_url: str, brand: str | None):
     tmp_path = None
     try:
-        # Download image from Supabase storage to a temp file
-        with tempfile.NamedTemporaryFile(suffix=".jpg", delete=False) as tmp:
-            tmp_path = tmp.name
-
         req = urllib.request.Request(image_url, headers={"User-Agent": "Mozilla/5.0"})
         with urllib.request.urlopen(req, timeout=30) as resp:
-            with open(tmp_path, "wb") as f:
-                f.write(resp.read())
+            raw = resp.read()
+
+        # Strip background so the query embedding matches garment-only product
+        # embeddings (both sides bg-removed → CLIP focuses on shape and color).
+        processed = _strip_bg(raw)
+        with tempfile.NamedTemporaryFile(suffix=".png", delete=False) as tmp:
+            tmp_path = tmp.name
+            tmp.write(processed)
 
         print(f"Generating CLIP embedding for job {job_id}...")
         embedding = generate_clip_embedding(tmp_path)

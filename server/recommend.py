@@ -40,9 +40,12 @@ def recommend():
     fill_slots = data.get("fill_slots")         # None = infer from empty slots
     mode       = data.get("mode", "closet")     # "closet" | "catalog"
     top_k      = min(int(data.get("top_k", 5)), 10)
+    gender     = data.get("gender") or None     # "male" | "female" | None
 
     if mode not in ("closet", "catalog"):
         return jsonify({"message": "mode must be 'closet' or 'catalog'"}), 400
+    if gender and gender not in ("male", "female"):
+        gender = None
 
     try:
         from recommendation.engine import get_recommendations
@@ -52,6 +55,7 @@ def recommend():
             fill_slots=fill_slots,
             mode=mode,
             top_k=top_k,
+            gender=gender,
         )
         return jsonify(result), 200
     except Exception as e:
@@ -95,6 +99,19 @@ def feedback():
     except Exception as e:
         print(f"⚠️  feedback insert failed: {e}")
 
+    # Also emit to the new unified event log
+    event_map = {"accept": "recommendation_added", "reject": "recommendation_disliked", "ignore": "recommendation_skipped"}
+    try:
+        from recommendation.rec_logging import log_event as _log_event
+        _log_event(
+            user_id=user_id,
+            event_type=event_map.get(signal, "recommendation_skipped"),
+            item_id=item_id,
+            context={"slot": slot, "outfit_ctx": outfit_ctx},
+        )
+    except Exception:
+        pass
+
     # For closet items: nudge the pref_vector toward or away from this item
     if item_id and signal in ("accept", "reject"):
         try:
@@ -116,17 +133,48 @@ def extract_bg():
     Results are cached on disk — repeat calls for the same URL are instant.
     """
     data = request.get_json(silent=True) or {}
-    image_url = (data.get("url") or "").strip()
-    slot      = (data.get("slot") or "").strip() or None
+    image_url    = (data.get("url")           or "").strip()
+    slot         = (data.get("slot")          or "").strip() or None
+    product_url  = (data.get("product_url")   or "").strip() or None
+    source_brand = (data.get("source_brand")  or "").strip() or None
+    product_name = (data.get("product_name")  or "").strip() or None
+    force        = bool(data.get("force", False))
+    force_step   = int(data.get("force_step", 0))
     if not image_url:
         return jsonify({"extracted_url": None}), 400
 
+    if force or force_step > 0:
+        # Delete disk + DB cache so the item is reprocessed from the requested step
+        try:
+            from catalog_icon import _icon_path
+            from db import get_supa
+            p = _icon_path(image_url, slot)
+            if os.path.exists(p):
+                os.remove(p)
+                print(f"🗑  force-cleared disk cache: {os.path.basename(p)}")
+            cache_key = f"v3:{image_url}|{slot or ''}"
+            get_supa().table("catalog_icon_cache").delete().eq("cache_key", cache_key).execute()
+        except Exception as fe:
+            print(f"⚠️  force-clear error: {fe}")
+
     try:
         from catalog_icon import extract_catalog_icon
-        path = extract_catalog_icon(image_url, slot)
+        path, step_used = extract_catalog_icon(image_url, slot,
+                                               product_url=product_url,
+                                               source_brand=source_brand,
+                                               product_name=product_name,
+                                               force_step=force_step)
         if path:
-            return jsonify({"extracted_url": f"/catalog_extracted/{os.path.basename(path)}"}), 200
-        return jsonify({"extracted_url": None}), 200
+            fname = os.path.basename(path)
+            # Cache-bust forced re-extractions so the browser doesn't serve the old file
+            import time as _time
+            qs = f"?v={int(_time.time())}" if (force or force_step > 0) else ""
+            return jsonify({
+                "extracted_url": f"/catalog_extracted/{fname}{qs}",
+                "from_cache": step_used == -1,
+                "step_used": step_used,
+            }), 200
+        return jsonify({"extracted_url": None, "from_cache": False, "step_used": -1}), 200
     except Exception as e:
         print(f"❌ extract_bg error: {e}")
         return jsonify({"extracted_url": None}), 200
@@ -136,6 +184,78 @@ def extract_bg():
 def serve_catalog_extracted(filename):
     from bg_remove import CACHE_DIR
     return send_from_directory(CACHE_DIR, filename)
+
+
+@recommend_bp.route("/recommend/events", methods=["POST"])
+def log_event():
+    """
+    Log a user interaction with a recommendation.
+    Body:
+      event_type        str   — recommendation_added | recommendation_removed |
+                                recommendation_disliked | recommendation_skipped |
+                                outfit_saved | item_liked
+      item_id           str | int | null
+      outfit_id         int | null
+      recommendation_id str | null
+      context           dict  — arbitrary extra data (slot, score, etc.)
+    """
+    user_id = _get_user_id(request)
+    if not user_id:
+        return jsonify({"message": "Unauthorized"}), 401
+
+    data   = request.get_json(silent=True) or {}
+    event  = data.get("event_type", "")
+
+    VALID_EVENTS = {
+        "recommendation_viewed", "recommendation_clicked",
+        "recommendation_added",  "recommendation_removed",
+        "recommendation_disliked", "recommendation_skipped",
+        "outfit_saved", "outfit_posted", "item_liked", "item_skipped",
+    }
+    if event not in VALID_EVENTS:
+        return jsonify({"message": f"Unknown event_type: {event}"}), 400
+
+    try:
+        from recommendation.rec_logging import log_event as _log_event
+        _log_event(
+            user_id=user_id,
+            event_type=event,
+            item_id=data.get("item_id"),
+            outfit_id=data.get("outfit_id"),
+            recommendation_id=data.get("recommendation_id"),
+            context=data.get("context") or {},
+        )
+    except Exception as e:
+        print(f"⚠️  /recommend/events failed: {e}")
+
+    # Also update recommendation_logs was_* flags
+    rec_id = data.get("recommendation_id")
+    if rec_id:
+        flag_map = {
+            "recommendation_added":    "was_added",
+            "recommendation_clicked":  "was_clicked",
+            "outfit_saved":            "was_saved",
+            "recommendation_disliked": "was_rejected",
+        }
+        flag = flag_map.get(event)
+        if flag:
+            try:
+                from recommendation.rec_logging import mark_recommendation
+                mark_recommendation(rec_id, flag)
+            except Exception:
+                pass
+
+    # For strong negative signal, nudge pref_vector away from this item
+    if event == "recommendation_disliked":
+        item_id = data.get("item_id")
+        if item_id:
+            try:
+                from recommendation.profile import update_pref_vector
+                update_pref_vector(user_id, int(item_id), direction=-1)
+            except Exception:
+                pass
+
+    return jsonify({"message": "Event logged"}), 200
 
 
 @recommend_bp.route("/recommend/refresh_profile", methods=["POST"])

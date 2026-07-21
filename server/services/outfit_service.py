@@ -15,20 +15,25 @@ def create_outfit(user_id, name, occasion=None, tags=None, notes=None, is_privat
     return result.data[0]["id"]
 
 
-def save_outfit_items(outfit_id, slot_item_pairs):
-    """slot_item_pairs: list of (slot, closet_item_id)"""
+def save_outfit_items(outfit_id, items):
+    """items: list of dicts with keys: slot, closet_item_id, catalog_data, nudge_x, nudge_y"""
     supa = get_supa()
     supa.table("outfit_items").delete().eq("outfit_id", outfit_id).execute()
 
     rows = [
-        {"outfit_id": outfit_id, "closet_item_id": closet_item_id, "slot": slot}
-        for slot, closet_item_id in slot_item_pairs
-        if closet_item_id is not None
+        {
+            "outfit_id":      outfit_id,
+            "closet_item_id": it.get("closet_item_id"),
+            "slot":           it["slot"],
+            "catalog_data":   it.get("catalog_data"),
+            "nudge_x":        int(it.get("nudge_x") or 0),
+            "nudge_y":        int(it.get("nudge_y") or 0),
+        }
+        for it in items
+        if it.get("closet_item_id") or it.get("catalog_data")
     ]
     if rows:
-        supa.table("outfit_items").upsert(
-            rows, on_conflict="outfit_id,closet_item_id,slot", ignore_duplicates=True
-        ).execute()
+        supa.table("outfit_items").insert(rows).execute()
 
 
 def _fetch_outfit_items(supa, outfit_ids: list) -> dict:
@@ -36,7 +41,7 @@ def _fetch_outfit_items(supa, outfit_ids: list) -> dict:
     if not outfit_ids:
         return {}
     oi_res = supa.table("outfit_items").select(
-        "outfit_id, slot, closet_item_id, "
+        "outfit_id, slot, closet_item_id, catalog_data, nudge_x, nudge_y, "
         "closet_items(id, filename, brand, icon_path, category, user_id)"
     ).in_("outfit_id", outfit_ids).execute()
 
@@ -46,6 +51,9 @@ def _fetch_outfit_items(supa, outfit_ids: list) -> dict:
         by_outfit.setdefault(r["outfit_id"], []).append({
             "slot":           r["slot"],
             "closet_item_id": r["closet_item_id"],
+            "catalog_data":   r.get("catalog_data"),
+            "nudge_x":        r.get("nudge_x") or 0,
+            "nudge_y":        r.get("nudge_y") or 0,
             "filename":       ci.get("filename"),
             "brand":          ci.get("brand"),
             "icon_path":      ci.get("icon_path"),
