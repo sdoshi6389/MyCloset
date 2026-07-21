@@ -34,14 +34,12 @@ except Exception:
 # ---------- Blueprint / Config ----------
 outfit2d_bp = Blueprint("outfit2d", __name__, url_prefix="/outfit")
 
-SECRET_KEY = os.getenv("JWT_SECRET_KEY", "supersecretkey")
+from config import JWT_SECRET
+SECRET_KEY = JWT_SECRET  # unified with the rest of the app (was JWT_SECRET_KEY/"supersecretkey")
 PUBLIC_BASE = os.getenv("PUBLIC_BASE_URL", "http://localhost:5000")
 
-# Where icon thumbs live (you already serve these via /icons)
-ICON_OUTPUTS_DIR = os.path.abspath(os.path.join(os.getcwd(), "icon_outputs"))
-
-# Where rendered outfits are saved (served by this blueprint)
-GENERATED_DIR = os.path.abspath(os.path.join(os.getcwd(), "generated_outfits"))
+# Output dirs resolved centrally (env-driven → persistent volume in prod)
+from paths import ICON_OUTPUTS_DIR, GENERATED_OUTFITS_DIR as GENERATED_DIR
 os.makedirs(GENERATED_DIR, exist_ok=True)
 
 # Canvas (4:5)

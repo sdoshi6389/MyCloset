@@ -4,7 +4,7 @@ import Layout from "./Layout";
 import { useCircle } from "../context/CircleContext";
 import "./Feed.css";
 
-const API = "http://localhost:5000";
+import { API_BASE as API } from "../config";
 
 export default function Feed() {
   const [posts, setPosts] = useState([]);

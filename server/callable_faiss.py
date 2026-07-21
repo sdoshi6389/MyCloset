@@ -44,7 +44,8 @@ REBUILD_COOLDOWN_SECS = 15 * 60   # 15 minutes
 STORAGE_BUCKET        = "faiss-cache"
 
 _HERE      = os.path.dirname(os.path.abspath(__file__))
-CACHE_DIR  = os.path.join(_HERE, "faiss_cache")
+CACHE_DIR  = os.environ.get("FAISS_CACHE_DIR") or os.path.join(_HERE, "faiss_cache")
+os.makedirs(CACHE_DIR, exist_ok=True)
 INDEX_FILE = os.path.join(CACHE_DIR, "all_products.index")
 META_FILE  = os.path.join(CACHE_DIR, "all_products_meta.pkl")
 EMBED_FILE = os.path.join(CACHE_DIR, "all_products_embeddings.npy")

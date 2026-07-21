@@ -12,7 +12,8 @@ bp = Blueprint("generate_dressed_mannequin", __name__)
 # ======================================================
 # CONFIG
 # ======================================================
-REPLICATE_TOKEN = "r8_PvRgDls7B1bddvMbl8JRcYqlZLvhtN63ikWOP"
+from config import REPLICATE_API_TOKEN
+REPLICATE_TOKEN = REPLICATE_API_TOKEN
 REPLICATE_MODEL = "cuuupid/idm-vton:0513734a452173b8173e907e3a59d19a36266e55b48528559432bd21c7d7e985"
 GSAM_VERSION = "ee871c19efb1941f55f66a3d7d960428c8a5afcb77449547fe8e5a3ab9ebc21c"
 

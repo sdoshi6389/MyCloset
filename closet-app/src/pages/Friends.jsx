@@ -3,7 +3,7 @@ import axios from "axios";
 import Layout from "./Layout";
 import "./Friends.css";
 
-const API = "http://localhost:5000";
+import { API_BASE as API } from "../config";
 
 export default function Friends() {
   const [tab, setTab] = useState("friends");

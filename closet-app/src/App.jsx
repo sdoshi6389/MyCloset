@@ -5,7 +5,7 @@ import Login from "./pages/Login.jsx";
 import Closet from "./pages/Closet.jsx";
 import Feed from "./pages/Feed.jsx";
 import Friends from "./pages/Friends.jsx";
-import Outfits from "./pages/Outfits.jsx";
+import Builder from "./pages/Builder.jsx";
 import Circles from "./pages/Circles.jsx";
 
 function App() {
@@ -18,7 +18,7 @@ function App() {
 
           {/* Protected — Closet is the home after login */}
           <Route path="/closet"   element={<ProtectedRoute><Closet /></ProtectedRoute>} />
-          <Route path="/outfits"  element={<ProtectedRoute><Outfits /></ProtectedRoute>} />
+          <Route path="/outfits"  element={<ProtectedRoute><Builder /></ProtectedRoute>} />
           <Route path="/circles"  element={<ProtectedRoute><Circles /></ProtectedRoute>} />
           <Route path="/feed"     element={<ProtectedRoute><Feed /></ProtectedRoute>} />
           <Route path="/discover" element={<ProtectedRoute><Friends /></ProtectedRoute>} />

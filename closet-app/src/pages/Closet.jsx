@@ -5,7 +5,7 @@ import Layout from "./Layout";
 import { useCircle } from "../context/CircleContext";
 import "./Closet.css";
 
-const API = "http://localhost:5000";
+import { API_BASE as API } from "../config";
 
 const DEFAULT_CATEGORIES = ["Tops", "Bottoms", "Outerwear", "Innerwear", "Accessories", "Shoes"];
 
@@ -24,6 +24,9 @@ function Closet() {
   const [sizeInput, setSizeInput] = useState("");
   const [categoryInput, setCategoryInput] = useState("");
   const [faissMatches, setFaissMatches] = useState([]);
+  const [matchPage,    setMatchPage]    = useState(0);
+  const [searchText,   setSearchText]   = useState("");
+  const [isSearching,  setIsSearching]  = useState(false);
 
   // UI state
   const [zoomedItem, setZoomedItem] = useState(null);
@@ -31,6 +34,7 @@ function Closet() {
   const [uploading, setUploading] = useState(false);
   const [uploadProgress, setUploadProgress] = useState(null); // { done, total } | null
   const [activeCategory, setActiveCategory] = useState("All");
+  const [activeSubcategory, setActiveSubcategory] = useState(null);
 
   const MAX_UPLOADS = 8;
 
@@ -82,6 +86,18 @@ function Closet() {
       alert(res.data.message);
     } catch (e) {
       alert("Reprocess request failed — check console.");
+      console.error(e);
+    }
+  };
+
+  // ── Re-tag all items (GPT analysis only, no icon regen) ─────────────────────
+  const handleRetagAll = async () => {
+    if (!window.confirm("Re-analyze all items with GPT to fill in subcategory, layering role, and other missing metadata? Icons will NOT be regenerated. This may take a few minutes.")) return;
+    try {
+      const res = await axios.post(`${API}/retag_metadata`, {}, { headers: authHeaders() });
+      alert(res.data.message);
+    } catch (e) {
+      alert("Re-tag request failed — check console.");
       console.error(e);
     }
   };
@@ -160,7 +176,7 @@ function Closet() {
     let attempts = 0;
     brandPollRef.current = setInterval(async () => {
       attempts++;
-      if (attempts > 20) { stopBrandPoll(); return; }
+      if (attempts > 40) { stopBrandPoll(); return; }
       try {
         const res = await axios.get(`${API}/get_closet_images`, { headers: authHeaders() });
         const updated = res.data.find((i) => i.filename === filename);
@@ -168,6 +184,12 @@ function Closet() {
 
         // Update the closet grid card live as GPT data arrives
         setItems((prev) => prev.map((i) => i.filename === filename ? { ...i, ...updated } : i));
+
+        // Push has_embedding into the open modal so Find Match appears the
+        // moment the CLIP embedding finishes — no save/re-edit needed
+        setActiveItem((prev) =>
+          prev?.filename === filename ? { ...prev, has_embedding: updated.has_embedding } : prev
+        );
 
         if (updated.brand) {
           setBrandInput(updated.brand);
@@ -177,7 +199,8 @@ function Closet() {
         if (detectedName) {
           setNameInput((prev) => prev || detectedName);
         }
-        if (updated.brand && detectedName) stopBrandPoll();
+        // Keep polling until brand, name, AND embedding are all ready
+        if (updated.brand && detectedName && updated.has_embedding) stopBrandPoll();
       } catch { /* ignore poll errors */ }
     }, 2000);
   };
@@ -257,6 +280,8 @@ function Closet() {
       await saveCategory(activeItem, categoryInput);
       if (res.data.matches?.length > 0) {
         setFaissMatches(res.data.matches);
+        setMatchPage(0);
+        setSearchText("");
       } else {
         alert("No similar products found in the database.");
         proceedToNextModal();
@@ -264,6 +289,28 @@ function Closet() {
     } catch (err) {
       console.error("Failed to find match", err);
       proceedToNextModal();
+    }
+  };
+
+  const handleTextSearch = async () => {
+    if (!activeItem || !searchText.trim()) return;
+    setIsSearching(true);
+    try {
+      const res = await axios.post(
+        `${API}/faiss_text_search`,
+        { filename: activeItem.filename, search_text: searchText.trim(), brand: brandInput || null },
+        { headers: { ...authHeaders(), "Content-Type": "application/json" } }
+      );
+      if (res.data.matches?.length > 0) {
+        setFaissMatches(res.data.matches);
+        setMatchPage(0);
+      } else {
+        alert("No matches found for that search.");
+      }
+    } catch (err) {
+      console.error("Text search failed", err);
+    } finally {
+      setIsSearching(false);
     }
   };
 
@@ -351,13 +398,26 @@ function Closet() {
   };
 
   // ── Derived: grouped items ───────────────────────────────────────────────────
+  // Available subcategories for the currently selected category
+  const availableSubcategories = activeCategory !== "All"
+    ? [...new Set(
+        items
+          .filter((it) => it.category === activeCategory && it.subcategory)
+          .map((it) => it.subcategory)
+      )].sort()
+    : [];
+
   const grouped = {};
   (activeCategory === "All" ? [...categories, "Uncategorized"] : [activeCategory]).forEach((cat) => {
-    const group = items.filter((it) =>
+    let group = items.filter((it) =>
       cat === "Uncategorized"
         ? !it.category || !categories.includes(it.category)
         : it.category === cat
     );
+    // Drill down by subcategory if one is selected
+    if (activeSubcategory && cat !== "Uncategorized") {
+      group = group.filter((it) => it.subcategory === activeSubcategory);
+    }
     if (group.length) grouped[cat] = group;
   });
 
@@ -394,7 +454,10 @@ function Closet() {
         <button className="btn-secondary" onClick={!isCameraOn ? startCamera : captureAndUpload}>
           {!isCameraOn ? "📷 Camera" : "📸 Capture"}
         </button>
-        <button className="btn-secondary" onClick={handleReprocessIcons} style={{ marginLeft: "auto", fontSize: "0.78rem" }}>
+        <button className="btn-secondary" onClick={handleRetagAll} style={{ marginLeft: "auto", fontSize: "0.78rem" }}>
+          ✦ Re-tag All
+        </button>
+        <button className="btn-secondary" onClick={handleReprocessIcons} style={{ fontSize: "0.78rem" }}>
           ✦ Regenerate Icons
         </button>
         {isCameraOn && (
@@ -411,7 +474,7 @@ function Closet() {
           <button
             key={cat}
             className={`closet-cat-tab${activeCategory === cat ? " active" : ""}`}
-            onClick={() => setActiveCategory(cat)}
+            onClick={() => { setActiveCategory(cat); setActiveSubcategory(null); }}
           >
             {cat}
           </button>
@@ -430,6 +493,27 @@ function Closet() {
           </button>
         </div>
       </div>
+
+      {/* ── Subcategory pills (only when a specific category is active) ──────── */}
+      {availableSubcategories.length > 0 && (
+        <div className="closet-subcat-tabs">
+          <button
+            className={`closet-subcat-tab${!activeSubcategory ? " active" : ""}`}
+            onClick={() => setActiveSubcategory(null)}
+          >
+            All {activeCategory}
+          </button>
+          {availableSubcategories.map((sub) => (
+            <button
+              key={sub}
+              className={`closet-subcat-tab${activeSubcategory === sub ? " active" : ""}`}
+              onClick={() => setActiveSubcategory(sub)}
+            >
+              {sub.replace(/_/g, " ")}
+            </button>
+          ))}
+        </div>
+      )}
 
       {/* ── Items grouped by category ───────────────────────────────────────── */}
       {Object.entries(grouped).map(([cat, catItems]) => (
@@ -524,40 +608,82 @@ function Closet() {
 
             <div className="modal-action-row">
               <button className="btn-primary" onClick={handleSave}>Save</button>
-              <button className="btn-secondary" onClick={handleFindMatch}>Find Match</button>
+              {activeItem.has_embedding && (
+                <button className="btn-secondary" onClick={handleFindMatch}>Find Match</button>
+              )}
               <button className="btn-secondary" onClick={() => setActiveItem(null)} style={{ marginLeft: "auto" }}>Cancel</button>
             </div>
             <p className="modal-action-hint">
-              <strong>Save</strong> stores brand/size/category.&nbsp;
-              <strong>Find Match</strong> also searches our product database for a similar item.
+              <strong>Save</strong> stores brand/size/category.
+              {activeItem.has_embedding
+                ? <>&nbsp;<strong>Find Match</strong> searches the product database for a similar item.</>
+                : <>&nbsp;Product matching becomes available once the AI finishes processing this item.</>
+              }
             </p>
           </div>
         </div>
       )}
 
       {/* ── FAISS match selector ─────────────────────────────────────────────── */}
-      {faissMatches.length > 0 && (
-        <div className="modal-overlay" onClick={() => setFaissMatches([])}>
-          <div className="modal-box match-modal" onClick={(e) => e.stopPropagation()}>
-            <h3>Similar products — pick the best match</h3>
-            <div className="match-grid">
-              {faissMatches.map((match, idx) => (
-                <div key={idx} className="match-card" onClick={() => handleMatchSelect(match)}>
-                  <img src={match.image} alt={match.title} />
-                  <div className="match-info">
-                    <p className="match-title">{match.title}</p>
-                    <p className="match-meta">{match.price} · {match.color}</p>
-                    <p className="match-source">{match.source}</p>
+      {faissMatches.length > 0 && (() => {
+        const PAGE_SIZE = 5;
+        const pageMatches = faissMatches.slice(matchPage * PAGE_SIZE, (matchPage + 1) * PAGE_SIZE);
+        const hasNext = (matchPage + 1) * PAGE_SIZE < faissMatches.length;
+        const totalPages = Math.ceil(faissMatches.length / PAGE_SIZE);
+        return (
+          <div className="modal-overlay" onClick={() => { setFaissMatches([]); proceedToNextModal(); }}>
+            <div className="modal-box match-modal" onClick={(e) => e.stopPropagation()}>
+              <h3>Similar products — pick the best match</h3>
+              <div className="match-search-row">
+                <input
+                  className="field-input"
+                  placeholder='Refine search (e.g. "Splendor Bra white")'
+                  value={searchText}
+                  onChange={(e) => setSearchText(e.target.value)}
+                  onKeyDown={(e) => e.key === "Enter" && handleTextSearch()}
+                />
+                <button
+                  className="btn-secondary"
+                  onClick={handleTextSearch}
+                  disabled={isSearching || !searchText.trim()}
+                >
+                  {isSearching ? "Searching…" : "Search"}
+                </button>
+              </div>
+              {totalPages > 1 && (
+                <p className="match-page-indicator">{matchPage + 1} / {totalPages}</p>
+              )}
+              <div className="match-grid">
+                {pageMatches.map((match, idx) => (
+                  <div key={idx} className="match-card" onClick={() => handleMatchSelect(match)}>
+                    <img src={match.image} alt={match.title} />
+                    <div className="match-info">
+                      <p className="match-title">{match.title}</p>
+                      <p className="match-meta">{match.price} · {match.color}</p>
+                      <p className="match-source">{match.source}</p>
+                    </div>
                   </div>
-                </div>
-              ))}
+                ))}
+              </div>
+              <div className="match-footer">
+                <button className="btn-secondary" onClick={() => { setFaissMatches([]); proceedToNextModal(); }}>
+                  Skip
+                </button>
+                {matchPage > 0 && (
+                  <button className="btn-secondary" onClick={() => setMatchPage(p => p - 1)}>
+                    ← Back
+                  </button>
+                )}
+                {hasNext && (
+                  <button className="btn-primary" onClick={() => setMatchPage(p => p + 1)}>
+                    Next →
+                  </button>
+                )}
+              </div>
             </div>
-            <button className="btn-secondary" style={{ marginTop: 12 }} onClick={() => { setFaissMatches([]); proceedToNextModal(); }}>
-              Skip
-            </button>
           </div>
-        </div>
-      )}
+        );
+      })()}
 
       {/* ── Zoom modal ──────────────────────────────────────────────────────── */}
       {zoomedItem && (
@@ -586,9 +712,6 @@ function ClosetItemCard({ item, ownedByMe, ownerInitial, onZoom, onEdit, onDelet
   const fname = iconFilename(item.icon_path);
   const iconUrl = fname ? `${API}/icons/${encodeURIComponent(fname)}` : null;
 
-  const emojiFname = iconFilename(item.emoticon_path);
-  const emojiUrl = emojiFname ? `${API}/emojis/${encodeURIComponent(emojiFname)}` : null;
-
   const hasGptData = !!(item.caption || item.type || item.color || item.style ||
     item.season || item.fabric || item.vibe || item.gender || item.keywords);
 
@@ -611,7 +734,7 @@ function ClosetItemCard({ item, ownedByMe, ownerInitial, onZoom, onEdit, onDelet
       onMouseLeave={() => { setHovered(false); setHoverPos(null); }}
     >
       {hovered && hasGptData && hoverPos && (
-        <ItemHoverCard item={item} iconUrl={iconUrl} emojiUrl={emojiUrl} pos={hoverPos} />
+        <ItemHoverCard item={item} iconUrl={iconUrl} pos={hoverPos} />
       )}
 
       <div className="closet-card-image" onClick={onZoom}>
@@ -630,7 +753,10 @@ function ClosetItemCard({ item, ownedByMe, ownerInitial, onZoom, onEdit, onDelet
           {item.brand || "Unknown"}
         </p>
         <div className="closet-card-tags">
-          {item.category && <span className="closet-tag-chip">{item.category}</span>}
+          {item.subcategory
+            ? <span className="closet-tag-chip closet-tag-chip--subcat">{item.subcategory.replace(/_/g, " ")}</span>
+            : item.category && <span className="closet-tag-chip">{item.category}</span>
+          }
           {item.size && <span className="closet-tag-chip">Size {item.size}</span>}
           {item.color && <span className="closet-tag-chip">{item.color}</span>}
         </div>
@@ -647,15 +773,16 @@ function ClosetItemCard({ item, ownedByMe, ownerInitial, onZoom, onEdit, onDelet
   );
 }
 
-function ItemHoverCard({ item, iconUrl, emojiUrl, pos }) {
+function ItemHoverCard({ item, iconUrl, pos }) {
   const tags = [
-    { label: "Type",   value: item.type },
-    { label: "Color",  value: item.color },
-    { label: "Style",  value: item.style },
-    { label: "Season", value: item.season },
-    { label: "Fabric", value: item.fabric },
-    { label: "Vibe",   value: item.vibe },
-    { label: "Gender", value: item.gender },
+    { label: "Type",     value: item.subcategory ? item.subcategory.replace(/_/g, " ") : item.type },
+    { label: "Layer",    value: item.layering_role ? item.layering_role.replace(/_/g, " ") : null },
+    { label: "Color",    value: item.color },
+    { label: "Style",    value: item.style },
+    { label: "Season",   value: item.season },
+    { label: "Fabric",   value: item.fabric },
+    { label: "Vibe",     value: item.vibe },
+    { label: "Gender",   value: item.gender },
   ].filter((t) => t.value);
 
   const keywords = Array.isArray(item.keywords)
@@ -666,12 +793,9 @@ function ItemHoverCard({ item, iconUrl, emojiUrl, pos }) {
 
   return createPortal(
     <div className="item-hover-card" style={{ left: pos.x, top: pos.y }}>
-      {(emojiUrl || iconUrl || item.caption) && (
+      {(iconUrl || item.caption) && (
         <div className="ihc-top">
-          {emojiUrl
-            ? <img src={emojiUrl} alt="emoji" className="ihc-icon" />
-            : iconUrl && <img src={iconUrl} alt="icon" className="ihc-icon" />
-          }
+          {iconUrl && <img src={iconUrl} alt="icon" className="ihc-icon" />}
           {item.caption && <p className="ihc-caption">{item.caption}</p>}
         </div>
       )}

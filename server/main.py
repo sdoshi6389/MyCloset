@@ -15,8 +15,16 @@ import mimetypes
 import os
 import threading
 
+from paths import ICON_OUTPUTS_DIR, EMOJI_OUTPUTS_DIR, MANNEQUIN_OUTPUTS_DIR
+
 app = Flask(__name__)
 CORS(app)
+
+
+@app.route("/health", methods=["GET"])
+def health():
+    # Cheap liveness probe for Railway health checks — no DB, no model loads.
+    return {"status": "ok"}, 200
 
 # ── Resolved image directories ───────────────────────────────────────────────
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
@@ -43,21 +51,21 @@ def uploaded_file(filename):
 
 @app.route("/icons/<path:filename>")
 def serve_icon(filename):
-    icon_dir = os.path.join(os.getcwd(), "icon_outputs")
+    icon_dir = ICON_OUTPUTS_DIR
     mimetype = mimetypes.guess_type(filename)[0] or "application/octet-stream"
     return send_from_directory(icon_dir, filename, mimetype=mimetype)
 
 
 @app.route("/emojis/<path:filename>")
 def serve_emoji(filename):
-    emoji_dir = os.path.join(os.getcwd(), "emoji_outputs")
+    emoji_dir = EMOJI_OUTPUTS_DIR
     mimetype = mimetypes.guess_type(filename)[0] or "application/octet-stream"
     return send_from_directory(emoji_dir, filename, mimetype=mimetype)
 
 
 @app.route("/dressed/<path:filename>")
 def serve_dressed_mannequin(filename):
-    out_dir = os.path.join(os.getcwd(), "mannequin_outputs")
+    out_dir = MANNEQUIN_OUTPUTS_DIR
     if not os.path.exists(os.path.join(out_dir, filename)):
         return abort(404)
     return send_from_directory(out_dir, filename)
@@ -86,6 +94,14 @@ def _start_faiss_worker():
     # thread itself is cheap (just sleeps on an Event); the actual index
     # only loads on the first call to search_similar_products(), which
     # already guards itself with _ensure_index().
+    #
+    # Disabled by default in production: its 15-min wake cycle makes outbound
+    # Supabase calls that would keep Railway from sleeping. Rebuild manually via
+    # POST /admin/faiss/rebuild instead. Set ENABLE_FAISS_WORKER=true to run it
+    # (e.g. on a scraper box).
+    if os.environ.get("ENABLE_FAISS_WORKER", "").strip().lower() not in ("1", "true", "yes"):
+        print("⏸️  FAISS background worker disabled (ENABLE_FAISS_WORKER not set)")
+        return
     try:
         from callable_faiss import start_background_worker
         start_background_worker()
@@ -97,14 +113,29 @@ _start_faiss_worker()
 
 # ── Admin endpoints ───────────────────────────────────────────────────────────
 from flask import jsonify as _jsonify, request as _request
+import hmac
+
+_ADMIN_SECRET = os.environ.get("ADMIN_DEPLOY_SECRET", "")
+
+
+def _admin_authorized() -> bool:
+    """Fail-closed bearer check for /admin/* routes (deny if secret unset)."""
+    if not _ADMIN_SECRET:
+        return False
+    auth = _request.headers.get("Authorization", "")
+    return auth.startswith("Bearer ") and hmac.compare_digest(auth[7:], _ADMIN_SECRET)
 
 @app.route("/admin/faiss/status", methods=["GET"])
 def faiss_status():
+    if not _admin_authorized():
+        return _jsonify({"error": "unauthorized"}), 401
     from callable_faiss import get_status
     return _jsonify(get_status()), 200
 
 @app.route("/admin/faiss/rebuild", methods=["POST"])
 def faiss_rebuild():
+    if not _admin_authorized():
+        return _jsonify({"error": "unauthorized"}), 401
     from callable_faiss import notify_rebuild_needed, force_rebuild
     if (_request.get_json(silent=True) or {}).get("force"):
         threading.Thread(target=force_rebuild, daemon=True, name="faiss-force").start()

@@ -15,12 +15,13 @@ import base64
 from PIL import Image
 from io import BytesIO
 from cost_log import log_chat_cost, log_image_cost
+from paths import ICON_OUTPUTS_DIR
 
 try:
     from config import OPENAI_API_KEY as _CFG_OAK
-    OPENAI_API_KEY = _CFG_OAK or "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"
+    OPENAI_API_KEY = _CFG_OAK or os.environ.get("OPENAI_API_KEY", "")
 except ImportError:
-    OPENAI_API_KEY = "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"
+    OPENAI_API_KEY = os.environ.get("OPENAI_API_KEY", "")
 
 SYSTEM_PROMPT = """\
 You are an expert fashion stylist, apparel merchandiser, and clothing cataloging system.
@@ -247,7 +248,7 @@ def analyze_image_with_gpt(image_path, tag_text=None):
 
 
 # === Step 2: GPT icon generation (transparent background) =======================
-def generate_icon_via_gpt(icon_prompt, source_image_path=None, output_dir="icon_outputs"):
+def generate_icon_via_gpt(icon_prompt, source_image_path=None, output_dir=ICON_OUTPUTS_DIR):
     """
     Produce a clean transparent-background PNG icon for a clothing item.
 
@@ -398,7 +399,7 @@ def _save_to_db(user_id, filename, icon_path, gpt_tags, category):
 
 
 # === Main entry point ============================================================
-def generate_icon_from_image(image_path, user_id, filename, tag_text=None, output_dir="icon_outputs"):
+def generate_icon_from_image(image_path, user_id, filename, tag_text=None, output_dir=ICON_OUTPUTS_DIR):
     """
     Runs all pipeline steps independently — failure in one does not block the others.
       1. GPT-4o Vision → rich metadata + emoji_prompt

@@ -1,7 +1,7 @@
 import { createContext, useContext, useState, useEffect, useCallback } from "react";
 import axios from "axios";
 
-const API = "http://localhost:5000";
+import { API_BASE as API } from "../config";
 const CircleContext = createContext();
 
 export function CircleProvider({ children }) {

@@ -46,9 +46,9 @@
 }
 .closet-cat-tab:hover { background: #22222e; color: #c0c0d4; }
 .closet-cat-tab.active {
-  background: #2c2040;
-  border-color: #7c5cbf;
-  color: #c9b8ff;
+  background: rgba(196,168,130,0.1);
+  border-color: rgba(196,168,130,0.35);
+  color: #c4a882;
 }
 
 .closet-add-cat {
@@ -56,6 +56,40 @@
   align-items: center;
   gap: 6px;
   margin-left: 8px;
+}
+
+/* ── Subcategory pills ──────────────────────────────────────────────────── */
+.closet-subcat-tabs {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 5px;
+  margin-bottom: 18px;
+  padding-left: 2px;
+}
+
+.closet-subcat-tab {
+  padding: 4px 12px;
+  border-radius: 20px;
+  border: 1px solid #1e1e2e;
+  background: transparent;
+  color: #60608a;
+  font-size: 0.78rem;
+  cursor: pointer;
+  transition: background 0.15s, color 0.15s, border-color 0.15s;
+  text-transform: capitalize;
+}
+.closet-subcat-tab:hover { background: #1c1c2a; color: #a0a0c0; }
+.closet-subcat-tab.active {
+  background: rgba(196,168,130,0.08);
+  border-color: rgba(196,168,130,0.3);
+  color: #c4a882;
+}
+
+.closet-tag-chip--subcat {
+  background: rgba(196,168,130,0.08);
+  border-color: rgba(196,168,130,0.25);
+  color: #c4a882;
+  text-transform: capitalize;
 }
 
 /* ── Category section ───────────────────────────────────────────────────── */
@@ -87,7 +121,7 @@
   transition: border-color 0.15s, transform 0.15s;
 }
 .closet-card:hover {
-  border-color: #5a4080;
+  border-color: rgba(196,168,130,0.3);
   transform: translateY(-2px);
 }
 
@@ -176,6 +210,13 @@
 /* ── Match modal grid ────────────────────────────────────────────────────── */
 .match-modal { max-width: 700px; max-height: 80vh; overflow-y: auto; }
 
+.match-search-row {
+  display: flex;
+  gap: 8px;
+  margin-top: 10px;
+}
+.match-search-row .field-input { flex: 1; }
+
 .match-grid {
   display: grid;
   grid-template-columns: repeat(auto-fill, minmax(160px, 1fr));
@@ -191,13 +232,28 @@
   cursor: pointer;
   transition: border-color 0.15s, transform 0.15s;
 }
-.match-card:hover { border-color: #7c5cbf; transform: translateY(-2px); }
+.match-card:hover { border-color: rgba(196,168,130,0.35); transform: translateY(-2px); }
 .match-card img { width: 100%; aspect-ratio: 1; object-fit: cover; }
 
 .match-info { padding: 8px; }
 .match-title { font-size: 0.78rem; font-weight: 600; color: #d0d0e8; margin: 0 0 3px; }
 .match-meta  { font-size: 0.72rem; color: #7070a0; margin: 0 0 2px; }
 .match-source{ font-size: 0.7rem; color: #555570; }
+
+.match-footer {
+  display: flex;
+  gap: 10px;
+  margin-top: 14px;
+  justify-content: flex-end;
+  align-items: center;
+}
+
+.match-page-indicator {
+  font-size: 0.72rem;
+  color: #555570;
+  text-align: right;
+  margin: 6px 0 0;
+}
 
 /* ── Modal item icon ──────────────────────────────────────────────────────── */
 .modal-item-icon {
@@ -237,8 +293,8 @@
   position: fixed;
   z-index: 9999;
   width: 252px;
-  background: #1a1a26;
-  border: 1px solid #4a3878;
+  background: #18181f;
+  border: 1px solid rgba(196,168,130,0.18);
   border-radius: 14px;
   padding: 14px;
   box-shadow: 0 8px 32px rgba(0, 0, 0, 0.65);
@@ -294,7 +350,7 @@
 
 .ihc-tag-value {
   font-size: 0.75rem;
-  color: #c9b8ff;
+  color: #c4a882;
   text-transform: capitalize;
 }
 

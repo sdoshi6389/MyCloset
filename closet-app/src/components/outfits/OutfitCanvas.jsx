@@ -1,7 +1,7 @@
 import { useState, useEffect, useRef } from "react";
 import "./OutfitCanvas.css";
 
-const API = "http://localhost:5000";
+import { API_BASE as API } from "../../config";
 
 export const BODY_ZONES = [
   { id: "head",        label: "Hat / Headwear",   hint: "Hat",       yPct:  1, xPct: 50, wPct: 20, hPct: 13, layer: 10 },

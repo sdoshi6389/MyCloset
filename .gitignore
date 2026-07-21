@@ -13,9 +13,6 @@ myenv/
 closet-app/node_modules/
 closet-app/dist/
 
-# Third-party vendored library (reinstall separately, not our code)
-GroundingDINO/
-
 # Model weights (large binaries, downloadable/regenerable)
 *.pth
 *.pt

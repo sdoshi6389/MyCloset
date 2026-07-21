@@ -1,17 +1,29 @@
 import torch
 from PIL import Image
-from transformers import CLIPProcessor, CLIPModel
 from pillow_heif import register_heif_opener
 
 # === HEIC Support ===
 register_heif_opener()
 
-# === CLIP Setup ===
+# === CLIP setup (lazy) ===
+# The ~600 MB CLIP weights load on the first embedding call, not at import, so
+# the web app boots fast and /health can respond before any model is in memory.
 device = "cuda" if torch.cuda.is_available() else "cpu"
-model = CLIPModel.from_pretrained("openai/clip-vit-base-patch32").to(device)
-processor = CLIPProcessor.from_pretrained("openai/clip-vit-base-patch32")
+_MODEL = None
+_PROCESSOR = None
+
+
+def _get_clip():
+    global _MODEL, _PROCESSOR
+    if _MODEL is None:
+        from transformers import CLIPProcessor, CLIPModel
+        _MODEL = CLIPModel.from_pretrained("openai/clip-vit-base-patch32").to(device)
+        _PROCESSOR = CLIPProcessor.from_pretrained("openai/clip-vit-base-patch32")
+    return _MODEL, _PROCESSOR
+
 
 def generate_clip_embedding(image_path):
+    model, processor = _get_clip()
     image = Image.open(image_path).convert("RGB")
     inputs = processor(images=image, return_tensors="pt").to(device)
     with torch.no_grad():
@@ -20,14 +32,17 @@ def generate_clip_embedding(image_path):
     embedding = embedding / embedding.norm()
     return embedding.cpu().tolist()
 
+
 def encode_text(text: str) -> list:
     """CLIP text encoder — returns a 512-dim normalized embedding in the same space as image embeddings."""
+    model, processor = _get_clip()
     inputs = processor(text=[text], return_tensors="pt", padding=True).to(device)
     with torch.no_grad():
         output = model.get_text_features(**inputs)
     embedding = output[0]
     embedding = embedding / embedding.norm()
     return embedding.cpu().tolist()
+
 
 def save_embedding_to_db(user_id, filename, embedding):
     from db import get_supa

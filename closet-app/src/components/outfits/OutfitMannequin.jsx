@@ -1,6 +1,6 @@
 import "./OutfitMannequin.css";
 
-const API = "http://localhost:5000";
+import { API_BASE as API } from "../../config";
 
 export const ZONES = [
   { id: "hat",    label: "Hat / Accessories" },

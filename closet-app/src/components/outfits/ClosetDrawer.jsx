@@ -1,7 +1,7 @@
 import { useState, useMemo, useEffect } from "react";
 import "./ClosetDrawer.css";
 
-const API = "http://localhost:5000";
+import { API_BASE as API } from "../../config";
 
 const ZONE_CATS = {
   head:        ["Accessories", "Hats"],

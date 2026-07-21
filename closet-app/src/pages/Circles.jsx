@@ -4,7 +4,7 @@ import Layout from "./Layout";
 import { useCircle } from "../context/CircleContext";
 import "./Circles.css";
 
-const API = "http://localhost:5000";
+import { API_BASE as API } from "../config";
 
 function iconFilename(iconPath) {
   if (!iconPath) return null;

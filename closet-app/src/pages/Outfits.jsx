@@ -6,7 +6,7 @@ import ClosetDrawer from "../components/outfits/ClosetDrawer";
 import { useCircle } from "../context/CircleContext";
 import "./Outfits.css";
 
-const API = "http://localhost:5000";
+import { API_BASE as API } from "../config";
 
 function emptySlots() {
   return Object.fromEntries(BODY_ZONES.map((z) => [z.id, null]));

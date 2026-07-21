@@ -1,7 +1,7 @@
 import { useState, useMemo } from "react";
 import "./ItemPickerPanel.css";
 
-const API = "http://localhost:5000";
+import { API_BASE as API } from "../../config";
 
 // Which categories are most relevant per zone (shown as default tab)
 const ZONE_DEFAULT_CAT = {
