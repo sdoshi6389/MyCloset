@@ -459,26 +459,42 @@ def _fetch_all_products(tables: list[str]) -> tuple[list, list]:
     for table in tables:
         brand   = _table_to_brand(table)
         gender  = _gender_from_table(table)
-        offset  = 0
-        emb_col = None
         print(f"  loading {table}…")
 
+        # Detect the embedding column + which meta columns exist from ONE probe
+        # row, so the paged fetch below selects ONLY the columns we need. SELECT *
+        # pulled every big embedding/description column for every row and blew the
+        # container's memory mid-fetch on large tables.
+        try:
+            probe = supa.table(table).select("*").limit(1).execute()
+        except Exception as e:
+            print(f"  ⚠️  error probing {table}: {e}")
+            continue
+        if not probe.data:
+            print(f"    → {len(meta)} rows so far")
+            continue
+        emb_col = _detect_embedding_col(probe.data[0])
+        if emb_col is None:
+            print(f"  ⚠️  no embedding column in {table} — skipping")
+            continue
+        print(f"    column: '{emb_col}'")
+
+        wanted      = ["id", "title", "price", "color", "url", "image", "gender"]
+        cols        = [c for c in wanted if c in probe.data[0]]
+        if emb_col not in cols:
+            cols.append(emb_col)
+        select_cols = ",".join(cols)
+
+        offset = 0
         while True:
             try:
-                res = supa.table(table).select("*").range(offset, offset + PAGE - 1).execute()
+                res = supa.table(table).select(select_cols).range(offset, offset + PAGE - 1).execute()
             except Exception as e:
                 print(f"  ⚠️  error reading {table}: {e}")
                 break
             rows = res.data or []
             if not rows:
                 break
-
-            if emb_col is None:
-                emb_col = _detect_embedding_col(rows[0])
-                if emb_col is None:
-                    print(f"  ⚠️  no embedding column in {table} — skipping")
-                    break
-                print(f"    column: '{emb_col}'")
 
             for row in rows:
                 emb = _parse_emb(row.get(emb_col))
@@ -582,6 +598,7 @@ def _build_and_persist(tables: list[str], row_count: int) -> bool:
         return False
 
     vecs  = np.stack(vecs_list)
+    del vecs_list  # free the per-row array list (~N×dim) before the heavy writes
     dim   = vecs.shape[1]
     index = faiss.IndexFlatL2(dim)
     index.add(vecs)
