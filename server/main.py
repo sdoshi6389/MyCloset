@@ -52,6 +52,11 @@ def uploaded_file(filename):
 @app.route("/icons/<path:filename>")
 def serve_icon(filename):
     icon_dir = ICON_OUTPUTS_DIR
+    if not os.path.isfile(os.path.join(icon_dir, filename)):
+        # Not on local disk (deployed instance) → redirect to Supabase Storage CDN.
+        from flask import redirect
+        from storage_utils import public_url
+        return redirect(public_url(f"icons/{filename}"))
     mimetype = mimetypes.guess_type(filename)[0] or "application/octet-stream"
     return send_from_directory(icon_dir, filename, mimetype=mimetype)
 

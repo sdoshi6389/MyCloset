@@ -171,7 +171,13 @@ def delete_image():
 
 @closet_bp.route("/static/<int:user_id>/<path:filename>")
 def serve_image(user_id, filename):
-    return send_from_directory(os.path.join(UPLOAD_FOLDER, str(user_id)), filename)
+    local_dir = os.path.join(UPLOAD_FOLDER, str(user_id))
+    if os.path.isfile(os.path.join(local_dir, filename)):
+        return send_from_directory(local_dir, filename)
+    # Not on local disk (deployed instance) → redirect to Supabase Storage CDN.
+    from flask import redirect
+    from storage_utils import public_url
+    return redirect(public_url(f"{user_id}/{filename}"))
 
 
 MAX_FILES_PER_UPLOAD = 8
@@ -234,6 +240,14 @@ def upload_images():
                 print(f"HEIC conversion failed for {filename}: {e}")
                 if not os.path.exists(filepath):
                     continue  # can't proceed without a readable file
+
+        # Push the original photo to Supabase Storage so the deployed app can
+        # serve it via the /static redirect (local disk is ephemeral there).
+        try:
+            from storage_utils import upload_file
+            upload_file(filepath, f"{user_id}/{filename}")
+        except Exception as e:
+            print(f"Storage upload failed for {filename}: {e}")
 
         try:
             tag_text = extract_tag_text(filepath)
