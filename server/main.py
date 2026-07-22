@@ -57,7 +57,8 @@ def serve_icon(filename):
         # Cache the redirect so repeat loads skip Railway entirely (browser cache).
         from flask import redirect
         from storage_utils import public_url
-        resp = redirect(public_url(f"icons/{filename}"))
+        _name = filename.replace("\\", "/").split("/")[-1]  # self-heal any path prefix
+        resp = redirect(public_url(f"icons/{_name}"))
         resp.headers["Cache-Control"] = "public, max-age=86400"
         return resp
     mimetype = mimetypes.guess_type(filename)[0] or "application/octet-stream"

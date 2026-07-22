@@ -23,7 +23,10 @@ def get_user_id_from_token(request):
             return None
 
 def _format_item(r, owner_user_id, owner_email, is_mine):
+    from storage_utils import public_url
     icon_path = r.get("icon_path")
+    # basename() is unsafe here: on Linux it won't strip a Windows "icon_outputs\" prefix.
+    icon_name = icon_path.replace("\\", "/").split("/")[-1] if icon_path else None
     return {
         "id":              r["id"],
         "filename":        r["filename"],
@@ -37,8 +40,8 @@ def _format_item(r, owner_user_id, owner_email, is_mine):
         "season":          r.get("season"),
         "formality_score": r.get("formality_score"),
         "occasion":        r.get("occasion"),
-        "icon_url":        f"/icons/{os.path.basename(icon_path)}" if icon_path else None,
-        "image_url":       f"/static/{owner_user_id}/{r['filename']}",
+        "icon_url":        public_url(f"icons/{icon_name}") if icon_name else None,
+        "image_url":       public_url(f"{owner_user_id}/{r['filename']}"),
         "owner_user_id":   owner_user_id,
         "owner_email":     owner_email,
         "owner_initial":   (owner_email or "?")[0].upper(),
