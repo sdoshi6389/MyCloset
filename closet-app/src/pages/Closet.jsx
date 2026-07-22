@@ -5,7 +5,7 @@ import Layout from "./Layout";
 import { useCircle } from "../context/CircleContext";
 import "./Closet.css";
 
-import { API_BASE as API } from "../config";
+import { API_BASE as API, iconSrc, photoSrc } from "../config";
 
 const DEFAULT_CATEGORIES = ["Tops", "Bottoms", "Outerwear", "Innerwear", "Accessories", "Shoes"];
 
@@ -568,7 +568,7 @@ function Closet() {
 
             {activeItem.icon_path && (
               <img
-                src={`${API}/icons/${activeItem.icon_path.split(/[/\\]/).pop()}`}
+                src={iconSrc(activeItem.icon_path)}
                 alt="icon"
                 className="modal-item-icon"
               />
@@ -689,7 +689,7 @@ function Closet() {
       {zoomedItem && (
         <div className="modal-overlay" onClick={() => setZoomedItem(null)}>
           <img
-            src={`${API}${zoomedItem.url}?t=${Date.now()}`}
+            src={`${photoSrc(zoomedItem.url)}?t=${Date.now()}`}
             alt="Zoom"
             style={{ maxHeight: "90vh", maxWidth: "90vw", borderRadius: 12 }}
           />
@@ -709,8 +709,7 @@ function ClosetItemCard({ item, ownedByMe, ownerInitial, onZoom, onEdit, onDelet
   const [hoverPos, setHoverPos] = useState(null);
   const cardRef = useRef(null);
 
-  const fname = iconFilename(item.icon_path);
-  const iconUrl = fname ? `${API}/icons/${encodeURIComponent(fname)}` : null;
+  const iconUrl = iconSrc(item.icon_path);
 
   const hasGptData = !!(item.caption || item.type || item.color || item.style ||
     item.season || item.fabric || item.vibe || item.gender || item.keywords);
@@ -738,7 +737,7 @@ function ClosetItemCard({ item, ownedByMe, ownerInitial, onZoom, onEdit, onDelet
       )}
 
       <div className="closet-card-image" onClick={onZoom}>
-        <img src={`${API}${item.url}`} alt={item.filename} />
+        <img src={photoSrc(item.url)} alt={item.filename} />
         {iconUrl && <img src={iconUrl} alt="icon" className="closet-card-icon-badge" />}
         {!ownedByMe && ownerInitial && (
           <div className="circle-owner-badge">{ownerInitial}</div>

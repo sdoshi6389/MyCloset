@@ -3,7 +3,7 @@ import axios from "axios";
 import Layout from "./Layout";
 import "./Friends.css";
 
-import { API_BASE as API } from "../config";
+import { API_BASE as API, iconSrc, photoSrc } from "../config";
 
 export default function Friends() {
   const [tab, setTab] = useState("friends");
@@ -332,10 +332,7 @@ export default function Friends() {
             {!closetLoading && friendCloset.length > 0 && (
               <div className="shared-closet-grid">
                 {friendCloset.map((item) => {
-                  const iconFile = item.icon_path ? item.icon_path.split(/[/\\]/).pop() : null;
-                  const imgSrc = iconFile
-                    ? `${API}/icons/${iconFile}`
-                    : `${API}${item.url}`;
+                  const imgSrc = item.icon_path ? iconSrc(item.icon_path) : photoSrc(item.url);
                   return (
                     <div key={item.id} className="shared-closet-card">
                       <img src={imgSrc} alt={item.brand || item.filename} />

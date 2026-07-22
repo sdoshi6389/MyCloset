@@ -1,6 +1,6 @@
 import "./OutfitMannequin.css";
 
-import { API_BASE as API } from "../../config";
+import { API_BASE as API, iconSrc, photoSrc } from "../../config";
 
 export const ZONES = [
   { id: "hat",    label: "Hat / Accessories" },
@@ -12,8 +12,8 @@ export const ZONES = [
 
 function getImgSrc(item) {
   if (!item) return null;
-  if (item.icon_path) return `${API}/icons/${item.icon_path.split(/[/\\]/).pop()}`;
-  return `${API}${item.url || `/static/${item.user_id ?? ""}/${item.filename}`}`;
+  if (item.icon_path) return iconSrc(item.icon_path);
+  return photoSrc(item.url || `/static/${item.user_id ?? ""}/${item.filename}`);
 }
 
 export default function OutfitMannequin({

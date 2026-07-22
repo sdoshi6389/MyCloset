@@ -4,7 +4,7 @@ import Layout from "./Layout";
 import { useCircle } from "../context/CircleContext";
 import "./Builder.css";
 
-import { API_BASE } from "../config";
+import { API_BASE, iconSrc } from "../config";
 
 // ── Zone definitions ──────────────────────────────────────────────────────────
 // Bracelet zones are intentionally excluded from ZONES — they live in
@@ -120,11 +120,7 @@ const abs  = (p) => (!p ? null : p.startsWith("http") ? p : `${API_BASE}${p}`);
 const tok  = () => localStorage.getItem("token");
 const auth = () => ({ Authorization: `Bearer ${tok()}` });
 
-const iconUrl = (icon_path) => {
-  if (!icon_path) return null;
-  const fname = icon_path.replace(/\\/g, "/").split("/").pop();
-  return `${API_BASE}/icons/${fname}`;
-};
+const iconUrl = (icon_path) => iconSrc(icon_path);
 
 const SLOT_PICKER = [
   { id: "hat",           label: "Hat"       },

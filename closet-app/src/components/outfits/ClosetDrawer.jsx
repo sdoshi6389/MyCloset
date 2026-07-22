@@ -1,7 +1,7 @@
 import { useState, useMemo, useEffect } from "react";
 import "./ClosetDrawer.css";
 
-import { API_BASE as API } from "../../config";
+import { API_BASE as API, iconSrc, photoSrc } from "../../config";
 
 const ZONE_CATS = {
   head:        ["Accessories", "Hats"],
@@ -15,8 +15,8 @@ const ZONE_CATS = {
 };
 
 function itemImg(item) {
-  if (item.icon_path) return `${API}/icons/${item.icon_path.split(/[/\\]/).pop()}`;
-  return `${API}${item.url}`;
+  if (item.icon_path) return iconSrc(item.icon_path);
+  return photoSrc(item.url);
 }
 
 export default function ClosetDrawer({ items, activeZone, onPickItem, needsZone }) {

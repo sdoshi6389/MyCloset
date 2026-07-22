@@ -1,7 +1,7 @@
 import { useState, useEffect, useRef } from "react";
 import "./OutfitCanvas.css";
 
-import { API_BASE as API } from "../../config";
+import { API_BASE as API, iconSrc, photoSrc } from "../../config";
 
 export const BODY_ZONES = [
   { id: "head",        label: "Hat / Headwear",   hint: "Hat",       yPct:  1, xPct: 50, wPct: 20, hPct: 13, layer: 10 },
@@ -32,13 +32,13 @@ export const CAT_TO_ZONE = {
 
 function getImgSrc(item) {
   if (!item) return null;
-  if (item.icon_path) return `${API}/icons/${item.icon_path.split(/[/\\]/).pop()}`;
-  return `${API}${item.url || `/static/${item.user_id ?? ""}/${item.filename}`}`;
+  if (item.icon_path) return iconSrc(item.icon_path);
+  return photoSrc(item.url || `/static/${item.user_id ?? ""}/${item.filename}`);
 }
 
 function getRawPhotoSrc(item) {
   if (!item) return null;
-  return `${API}${item.url || `/static/${item.user_id ?? ""}/${item.filename}`}`;
+  return photoSrc(item.url || `/static/${item.user_id ?? ""}/${item.filename}`);
 }
 
 export default function OutfitCanvas({

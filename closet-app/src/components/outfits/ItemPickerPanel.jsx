@@ -1,7 +1,7 @@
 import { useState, useMemo } from "react";
 import "./ItemPickerPanel.css";
 
-import { API_BASE as API } from "../../config";
+import { API_BASE as API, iconSrc, photoSrc } from "../../config";
 
 // Which categories are most relevant per zone (shown as default tab)
 const ZONE_DEFAULT_CAT = {
@@ -13,8 +13,8 @@ const ZONE_DEFAULT_CAT = {
 };
 
 function itemImgSrc(item) {
-  if (item.icon_path) return `${API}/icons/${item.icon_path.split(/[/\\]/).pop()}`;
-  return `${API}${item.url}`;
+  if (item.icon_path) return iconSrc(item.icon_path);
+  return photoSrc(item.url);
 }
 
 export default function ItemPickerPanel({ zone, zoneName, closetItems, onPick, onClose }) {

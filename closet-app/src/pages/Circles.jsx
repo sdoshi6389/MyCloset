@@ -4,7 +4,7 @@ import Layout from "./Layout";
 import { useCircle } from "../context/CircleContext";
 import "./Circles.css";
 
-import { API_BASE as API } from "../config";
+import { API_BASE as API, iconSrc, photoSrc } from "../config";
 
 function iconFilename(iconPath) {
   if (!iconPath) return null;
@@ -163,10 +163,7 @@ export default function Circles() {
             ) : (
               <div className="shared-closet-grid">
                 {sharedCloset.items.map((item) => {
-                  const fname = iconFilename(item.icon_path);
-                  const imgSrc = fname
-                    ? `${API}/icons/${encodeURIComponent(fname)}`
-                    : `${API}${item.url}`;
+                  const imgSrc = item.icon_path ? iconSrc(item.icon_path) : photoSrc(item.url);
                   return (
                     <div key={item.id} className="shared-closet-card">
                       <img src={imgSrc} alt={item.brand || item.filename} />
