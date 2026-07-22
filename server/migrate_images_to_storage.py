@@ -41,9 +41,10 @@ for r in rows:
         miss_img += 1
         print(f"  ⚠️  missing local original for {uid}/{fn}")
 
-    # Icon → icons/{basename}
+    # Icon → icons/{basename}  (re-encoded to WebP, ~5x smaller, same resolution)
     if ip and os.path.isfile(ip):
-        if upload_file(ip, f"icons/{os.path.basename(ip)}"):
+        icon_key = ip.replace("\\", "/").split("/")[-1]
+        if upload_file(ip, f"icons/{icon_key}", webp=True):
             ok_icon += 1
         else:
             miss_icon += 1

@@ -175,9 +175,12 @@ def serve_image(user_id, filename):
     if os.path.isfile(os.path.join(local_dir, filename)):
         return send_from_directory(local_dir, filename)
     # Not on local disk (deployed instance) → redirect to Supabase Storage CDN.
+    # Cache the redirect so repeat loads skip Railway entirely (straight from browser cache).
     from flask import redirect
     from storage_utils import public_url
-    return redirect(public_url(f"{user_id}/{filename}"))
+    resp = redirect(public_url(f"{user_id}/{filename}"))
+    resp.headers["Cache-Control"] = "public, max-age=86400"
+    return resp
 
 
 MAX_FILES_PER_UPLOAD = 8

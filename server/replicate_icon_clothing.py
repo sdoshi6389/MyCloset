@@ -461,7 +461,8 @@ def generate_icon_from_image(image_path, user_id, filename, tag_text=None, outpu
         # Push the icon to Supabase Storage (deployed app serves it via /icons redirect)
         try:
             from storage_utils import upload_file
-            upload_file(icon_path, f"icons/{os.path.basename(icon_path)}")
+            _icon_key = icon_path.replace("\\", "/").split("/")[-1]
+            upload_file(icon_path, f"icons/{_icon_key}", webp=True)  # WebP: ~5x smaller, same look
         except Exception as e:
             print(f"Storage upload failed for icon {icon_path}: {e}")
         try:

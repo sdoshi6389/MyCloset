@@ -54,9 +54,12 @@ def serve_icon(filename):
     icon_dir = ICON_OUTPUTS_DIR
     if not os.path.isfile(os.path.join(icon_dir, filename)):
         # Not on local disk (deployed instance) → redirect to Supabase Storage CDN.
+        # Cache the redirect so repeat loads skip Railway entirely (browser cache).
         from flask import redirect
         from storage_utils import public_url
-        return redirect(public_url(f"icons/{filename}"))
+        resp = redirect(public_url(f"icons/{filename}"))
+        resp.headers["Cache-Control"] = "public, max-age=86400"
+        return resp
     mimetype = mimetypes.guess_type(filename)[0] or "application/octet-stream"
     return send_from_directory(icon_dir, filename, mimetype=mimetype)
 
