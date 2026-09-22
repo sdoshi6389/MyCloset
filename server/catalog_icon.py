@@ -900,11 +900,16 @@ def extract_catalog_icon(image_url: str,
             _db_save(image_url, slot, out_path)
             return out_path, 1
 
-        # ── Step 2: Gemini (~1¢) ─────────────────────────────────────────
+        # ── Step 2: Gemini image (~1¢) ───────────────────────────────────
+        # Measured on a sample of products the free steps could not handle:
+        #   gemini-2.5-flash-image  4/4 success, median  8.1 s
+        #   gemini vision+crop      0/4 success, median  6.1 s
+        #   gpt-image-1             3/4 success, median 36.1 s
+        # The vision+crop path re-runs rembg on a crop, so it fails for exactly
+        # the images that reached this step — it only ever added latency before
+        # gpt-image-1, so it is no longer in the chain.
         if force_step <= 2:
             result = _call_gemini_image(best_tmp, slot, out_path, product_name)
-            if result is None:
-                result = _call_gemini_vision(best_tmp, slot, out_path, product_name)
             if result:
                 _db_save(image_url, slot, result)
                 return result, 2
