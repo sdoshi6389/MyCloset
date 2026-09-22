@@ -117,6 +117,19 @@ const SLOT_TO_CATEGORY = {
 };
 
 const abs  = (p) => (!p ? null : p.startsWith("http") ? p : `${API_BASE}${p}`);
+
+// Catalog cards have no icon until extraction finishes. Point the placeholder at
+// our proxy rather than the brand CDN directly — browsers block a lot of those
+// outright (ERR_BLOCKED_BY_ORB), which leaves a broken image for the whole wait.
+const catalogSrc = (rec) => {
+  if (!rec) return null;
+  if (rec.extractedUrl) return rec.extractedUrl;
+  if (rec.thumb_url || rec.icon_url) return rec.thumb_url || rec.icon_url;
+  if (rec.source === "catalog" && rec.image_url) {
+    return `${API_BASE}/catalog_image?url=${encodeURIComponent(rec.image_url)}`;
+  }
+  return rec.image_url || null;
+};
 const tok  = () => localStorage.getItem("token");
 const auth = () => ({ Authorization: `Bearer ${tok()}` });
 
@@ -1548,8 +1561,8 @@ function CanvasZone({ zone, computedTop, chosen, isDragging, dragZone, altHeld, 
 
   const rec           = (!chosen && !preview && recCandidates?.length > 0) ? (recCandidates[recIdx] || recCandidates[0]) : null;
   const displayUrl    = chosen ? (chosen.icon_url || chosen.image_url) : null;
-  const recDisplayUrl = rec   ? (rec.extractedUrl || rec.icon_url || rec.image_url) : null;
-  const previewUrl    = preview ? (preview.extractedUrl || preview.icon_url || preview.image_url) : null;
+  const recDisplayUrl = catalogSrc(rec);
+  const previewUrl    = catalogSrc(preview);
   const isPlaceholder = chosen && !chosen.icon_url;
   const brightness    = altHeld ? 1 : (zone.recede ?? 1);
   const isTarget      = isDragging && (dragZone ? dragZone === zone.id : !chosen);
@@ -1812,6 +1825,9 @@ function RecRailItem({ rec, slot, onClickPlace, onDragStart, onDragEnd, onExtrac
   //  -1 = served from cache, 0 = PIL, 1 = rembg, 2 = Gemini, 3 = GPT
   const [stepOverride, setStepOverride]       = useState(null);
   const [forceExtracting, setForceExtracting] = useState(false);
+  const [imgFailed, setImgFailed]             = useState(false);
+  // A newly extracted cutout replaces a failed placeholder, so let it try again
+  useEffect(() => { setImgFailed(false); }, [rec.extractedUrl]);
   const initialExtracting = rec.source === "catalog" && !rec.extractedUrl && !forceExtracting;
 
   const _doExtract = useCallback((forceStep, hardReset = false) => {
@@ -1865,8 +1881,12 @@ function RecRailItem({ rec, slot, onClickPlace, onDragStart, onDragEnd, onExtrac
     _doExtract(0, true);    // force-clear cache, restart from step 0
   }, [onExtracted, _doExtract]);
 
-  // 68px card: prefer the 320px thumb over the 1024px icon
-  const displayUrl = rec.extractedUrl || rec.thumb_url || rec.icon_url || rec.image_url;
+  // 68px card: prefer the 320px thumb over the 1024px icon; catalog items fall
+  // back to the proxied product photo so the card is never blank while extracting
+  const rawUrl     = catalogSrc(rec);
+  // A small share of scraped products (~4%) have dead image urls — show the
+  // neutral placeholder rather than a broken-image icon.
+  const displayUrl = imgFailed ? null : rawUrl;
   const isLoading  = initialExtracting || forceExtracting;
   const label = rec.title || (rec.brand && rec.brand.toLowerCase() !== "unknown" ? rec.brand : "—");
   // Show ↻ only when: extraction completed (stepOverride known), was freshly extracted (not cache = -1),
@@ -1888,7 +1908,10 @@ function RecRailItem({ rec, slot, onClickPlace, onDragStart, onDragEnd, onExtrac
           alt=""
           loading="lazy"
           decoding="async"
-          onError={fallbackToIcon}
+          onError={(e) => {
+            if (rec.source === "catalog") setImgFailed(true);
+            else fallbackToIcon(e);
+          }}
           style={{ opacity: isLoading ? 0.4 : 1, transition: "opacity 0.3s" }}
         />
       ) : (

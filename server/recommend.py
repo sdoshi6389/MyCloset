@@ -186,6 +186,35 @@ def extract_bg():
         return jsonify({"extracted_url": None}), 200
 
 
+@recommend_bp.route("/catalog_image", methods=["GET"])
+def catalog_image_proxy():
+    """Serve a brand's product photo through our own origin.
+
+    Catalog cards have no icon until extraction finishes, so they fall back to the
+    brand CDN directly — which browsers frequently refuse (ERR_BLOCKED_BY_ORB),
+    leaving a broken image for the whole wait. Proxying gives the card something
+    to show immediately; the cutout replaces it when ready.
+    """
+    import requests as _rq
+    from flask import Response
+    url = (request.args.get("url") or "").strip()
+    if not url.startswith(("http://", "https://")):
+        return jsonify({"message": "bad url"}), 400
+    try:
+        r = _rq.get(url, timeout=30, headers={
+            "User-Agent": "Mozilla/5.0 (compatible; MyCloset/1.0)",
+            "Accept": "image/avif,image/webp,image/*,*/*",
+        })
+        ctype = (r.headers.get("content-type") or "")
+        if r.status_code != 200 or not ctype.startswith("image"):
+            return jsonify({"message": "unavailable"}), 404
+        resp = Response(r.content, mimetype=ctype.split(";")[0])
+        resp.headers["Cache-Control"] = "public, max-age=86400"
+        return resp
+    except Exception:
+        return jsonify({"message": "unavailable"}), 404
+
+
 @recommend_bp.route("/catalog_extracted/<path:filename>")
 def serve_catalog_extracted(filename):
     from bg_remove import CACHE_DIR

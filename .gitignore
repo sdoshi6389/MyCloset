@@ -52,3 +52,6 @@ completed_scrapers/*_cookies.json
 .claude/
 *.stackdump
 jcrew_products_dump.json
+
+# Runtime API cost log (generated, grows on every request)
+server/api_cost_log.jsonl

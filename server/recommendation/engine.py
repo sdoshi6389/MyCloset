@@ -421,6 +421,15 @@ def get_recommendations(
 
         results[slot] = final
 
+        # Catalog cards need their background stripped before they look right.
+        # Start that now rather than waiting for each card to ask on render.
+        if mode == "catalog" and final:
+            try:
+                from catalog_prewarm import prewarm
+                prewarm(final, slot)
+            except Exception as e:
+                print(f"⚠️  prewarm skipped: {e}")
+
         # Log impressions (non-blocking)
         try:
             outfit_ctx = {
