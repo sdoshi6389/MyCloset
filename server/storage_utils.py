@@ -86,6 +86,37 @@ def _put(dest_path: str, data: bytes, content_type: str):
     )
 
 
+def upload_bytes(data: bytes, dest_path: str, content_type: str = "image/png") -> str | None:
+    """Upload raw bytes to BUCKET at dest_path. Returns the public URL, or None."""
+    ensure_bucket()
+    try:
+        _put(dest_path, data, content_type)
+        return public_url(dest_path)
+    except Exception as e:
+        print(f"⚠️  Storage upload failed for {dest_path}: {e}")
+        return None
+
+
+def fetch_bytes(url_or_path: str) -> bytes | None:
+    """Read an image the app owns, whether it's a Storage URL or a local path.
+
+    Container filesystems are ephemeral and closet photos now live in Storage,
+    so anything that needs the actual pixels has to tolerate both forms.
+    """
+    import requests
+    if url_or_path.startswith("http"):
+        try:
+            r = requests.get(url_or_path, timeout=60)
+            return r.content if r.status_code == 200 else None
+        except Exception as e:
+            print(f"⚠️  fetch_bytes failed for {url_or_path[:70]}: {e}")
+            return None
+    if os.path.isfile(url_or_path):
+        with open(url_or_path, "rb") as f:
+            return f.read()
+    return None
+
+
 def upload_thumb(src, icon_name: str) -> str | None:
     """Generate + upload the THUMB_PX WebP for an icon. src: local path or bytes."""
     ensure_bucket()

@@ -42,6 +42,7 @@ def get_item_by_id(user_id: int, item_id: int):
     result = get_supa().table("closet_items").select(
         "id, user_id, filename, filepath, caption, brand, color, icon_path"
     ).eq("id", item_id).execute()
+    # filename + user_id are what let us fall back to the Storage copy
     row = result.data[0] if result.data else None
     if not row:
         raise ValueError(f"Item id not found: {item_id}")
@@ -99,15 +100,42 @@ def _replicate_predict_model(model_tag: str, inputs: dict):
 # ======================================================
 # Image Processing
 # ======================================================
-def load_image_bytes(path_on_disk: str) -> bytes:
-    with open(path_on_disk, "rb") as f:
-        return f.read()
+def load_closet_image_bytes(row: dict) -> bytes:
+    """Read a closet photo wherever it actually lives.
+
+    filepath is a path from whichever machine did the upload ("uploaded_closets\\5\\
+    img.jpg"), so it does not exist inside a deployed container — the photo is in
+    Storage. Try local disk first for dev, then the CDN.
+    """
+    from storage_utils import fetch_bytes, public_url
+    candidates = []
+    fp = row.get("filepath")
+    if fp:
+        candidates.append(fp)
+    if row.get("filename"):
+        candidates.append(public_url(f"{row['user_id']}/{row['filename']}"))
+    for src in candidates:
+        data = fetch_bytes(src)
+        if data:
+            return data
+    raise FileNotFoundError(f"closet image unavailable for item {row.get('id')}")
 
 
 def save_image_and_get_url(img: Image.Image, rel_path: str) -> str:
+    """Persist the render to Storage (container disk is wiped on deploy)."""
+    buf = io.BytesIO()
+    img.save(buf, format="JPEG", quality=92)
+    data = buf.getvalue()
+
+    from storage_utils import upload_bytes
+    url = upload_bytes(data, f"vton/{rel_path}", "image/jpeg")
+    if url:
+        return url
+
     out_path = os.path.join(PROCESSED_DIR, rel_path)
     os.makedirs(os.path.dirname(out_path), exist_ok=True)
-    img.save(out_path)
+    with open(out_path, "wb") as f:
+        f.write(data)
     return f"{PUBLIC_BASE_URL}/processed/{rel_path}"
 
 
@@ -211,7 +239,9 @@ def generate_dressed_mannequin():
     ]
     stages.sort(key=lambda x: x[0])
 
-    mannequin_path = os.path.join("static", "mannequin_base.png")
+    # Anchor to this module, not the process CWD
+    mannequin_path = os.path.join(os.path.dirname(os.path.abspath(__file__)),
+                                  "static", "mannequin_base.png")
     if not os.path.exists(mannequin_path):
         return jsonify({
             "error": "Virtual try-on is not yet configured — mannequin_base.png is missing from the server.",
@@ -223,7 +253,7 @@ def generate_dressed_mannequin():
     for _, slot, item_id, category in stages:
         try:
             rec = get_item_by_id(user_id, item_id)
-            img_bytes = load_image_bytes(rec["filepath"])
+            img_bytes = load_closet_image_bytes(rec)
             garment_desc = rec.get("caption") or rec.get("brand") or slot
 
             rgba = Image.open(io.BytesIO(img_bytes)).convert("RGBA")

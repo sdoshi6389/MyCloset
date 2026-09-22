@@ -169,12 +169,14 @@ def extract_bg():
                                                product_name=product_name,
                                                force_step=force_step)
         if path:
-            fname = os.path.basename(path)
             # Cache-bust forced re-extractions so the browser doesn't serve the old file
             import time as _time
             qs = f"?v={int(_time.time())}" if (force or force_step > 0) else ""
+            # A cached hit may already be a Storage URL; serve it directly.
+            url = path if path.startswith("http") else \
+                f"/catalog_extracted/{os.path.basename(path)}"
             return jsonify({
-                "extracted_url": f"/catalog_extracted/{fname}{qs}",
+                "extracted_url": f"{url}{qs}",
                 "from_cache": step_used == -1,
                 "step_used": step_used,
             }), 200
@@ -187,7 +189,16 @@ def extract_bg():
 @recommend_bp.route("/catalog_extracted/<path:filename>")
 def serve_catalog_extracted(filename):
     from bg_remove import CACHE_DIR
-    return send_from_directory(CACHE_DIR, filename)
+    name = filename.replace("\\", "/").split("/")[-1]
+    if os.path.isfile(os.path.join(CACHE_DIR, name)):
+        return send_from_directory(CACHE_DIR, name)
+    # Not on this container's disk (fresh deploy, or extracted elsewhere) →
+    # redirect to the Storage copy so saved outfits keep their images.
+    from flask import redirect
+    from storage_utils import public_url
+    resp = redirect(public_url(f"catalog_extracted/{name}"))
+    resp.headers["Cache-Control"] = "public, max-age=86400"
+    return resp
 
 
 @recommend_bp.route("/recommend/events", methods=["POST"])

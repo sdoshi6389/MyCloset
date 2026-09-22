@@ -69,7 +69,17 @@ def _icon_path(image_url: str, slot: str | None = None) -> str:
     return os.path.join(CACHE_DIR, f"gptv3_{h}.png")
 
 
+def storage_key(image_url: str, slot: str | None = None) -> str:
+    return f"catalog_extracted/{os.path.basename(_icon_path(image_url, slot))}"
+
+
 def _db_lookup(image_url: str, slot: str | None) -> str | None:
+    """Returns a local path or a Storage URL — whichever the cache holds and can serve.
+
+    Older rows store a local path from whichever machine ran the extraction; on a
+    fresh container those don't exist, so fall back to Storage rather than paying
+    for a re-extraction.
+    """
     cache_key = f"v3:{image_url}|{slot or ''}"
     try:
         from db import get_supa
@@ -80,14 +90,39 @@ def _db_lookup(image_url: str, slot: str | None) -> str | None:
                .execute())
         if res.data:
             p = res.data[0]["icon_path"]
-            if os.path.exists(p):
+            if p and p.startswith("http"):
                 return p
+            if p and os.path.exists(p):
+                return p
+            # Stale local path — the extraction may still be in Storage.
+            from storage_utils import public_url
+            import requests
+            url = public_url(storage_key(image_url, slot))
+            try:
+                if requests.head(url, timeout=20).status_code == 200:
+                    return url
+            except Exception:
+                pass
     except Exception as e:
         print(f"⚠️  catalog_icon DB lookup: {e}")
     return None
 
 
 def _db_save(image_url: str, slot: str | None, icon_path: str):
+    """Persist the extraction to Storage and cache its URL.
+
+    Extractions used to live only on the container's disk, which is wiped on every
+    deploy — so saved outfits lost their catalog images and each redeploy silently
+    re-paid for Gemini/GPT extraction. Storage keeps them.
+    """
+    stored = None
+    try:
+        from storage_utils import upload_bytes
+        with open(icon_path, "rb") as f:
+            stored = upload_bytes(f.read(), storage_key(image_url, slot), "image/png")
+    except Exception as e:
+        print(f"⚠️  catalog_icon Storage upload: {e}")
+
     cache_key = f"v3:{image_url}|{slot or ''}"
     try:
         from db import get_supa
@@ -95,7 +130,7 @@ def _db_save(image_url: str, slot: str | None, icon_path: str):
             "cache_key": cache_key,
             "image_url": image_url,
             "slot":      slot,
-            "icon_path": icon_path,
+            "icon_path": stored or icon_path,
         }).execute()
     except Exception as e:
         print(f"⚠️  catalog_icon DB save: {e}")
