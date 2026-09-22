@@ -916,7 +916,7 @@ def extract_catalog_icon(image_url: str,
     skip_free = force_step == 0 and _gemini_first(slot, product_name)
     if skip_free:
         why = slot if (slot and slot.lower() in _GEMINI_FIRST_SLOTS) else product_name
-        print(f"↳ lingerie/swim ({why}) - skipping free steps, straight to Gemini")
+        print(f"   lingerie/swim ({why}) - skipping free steps, straight to Gemini")
 
     try:
         # ── Step 0: PIL white-bg removal (free, ~0¢) ─────────────────────
