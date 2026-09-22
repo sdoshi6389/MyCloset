@@ -289,6 +289,35 @@ def upload_images():
     }), 200
 
 
+def _ensure_local_file(user_id: int, filename: str) -> str | None:
+    """
+    Return a local path for the given closet item.
+    Checks the local upload folder first; if not found (Railway/deployed), downloads
+    from Supabase Storage to a temp file and returns that path.
+    The caller is responsible for deleting the temp file after use.
+    """
+    local = os.path.join(UPLOAD_FOLDER, str(user_id), filename)
+    if os.path.isfile(local):
+        return local
+    # Try Supabase Storage download
+    try:
+        from storage_utils import BUCKET, _SUPABASE_URL
+        import requests as _req, tempfile as _tmp
+        cdn_url = f"{_SUPABASE_URL}/storage/v1/object/public/{BUCKET}/{user_id}/{filename}"
+        r = _req.get(cdn_url, timeout=60)
+        if r.status_code == 200:
+            suffix = os.path.splitext(filename)[1] or ".jpg"
+            tmp = _tmp.NamedTemporaryFile(suffix=suffix, delete=False)
+            tmp.write(r.content)
+            tmp.close()
+            print(f"⬇️  Downloaded {filename} from Storage to temp file")
+            return tmp.name
+        print(f"⚠️  Storage download {filename} returned {r.status_code}")
+    except Exception as e:
+        print(f"⚠️  Storage download failed for {filename}: {e}")
+    return None
+
+
 def _run_ai_pipeline(filepath, filename, user_id, tag_text=""):
     """Background: GPT-4o icon/tagging → CLIP embedding. FAISS runs only on user request."""
     print(f"AI pipeline starting for {filename}")
@@ -368,19 +397,26 @@ def retag_metadata():
 
     queued = 0
     for row in result.data:
-        filepath = row.get("filepath")
         filename = row.get("filename")
         tag_text = row.get("tag_text") or ""
-        if not filepath or not os.path.isfile(filepath):
-            filepath = os.path.join(UPLOAD_FOLDER, str(user_id), filename) if filename else None
-        if filepath and os.path.isfile(filepath):
-            t = threading.Thread(
-                target=retag_metadata_only,
-                args=(filepath, user_id, filename, tag_text),
-                daemon=True,
-            )
-            t.start()
-            queued += 1
+        if not filename:
+            continue
+
+        def _retag_task(fn, uid, tt):
+            fp = _ensure_local_file(uid, fn)
+            if not fp:
+                print(f"⚠️  retag: no file found for {fn}")
+                return
+            is_temp = not fp.startswith(os.path.join(UPLOAD_FOLDER, str(uid)))
+            try:
+                retag_metadata_only(fp, uid, fn, tt)
+            finally:
+                if is_temp and os.path.exists(fp):
+                    os.remove(fp)
+
+        t = threading.Thread(target=_retag_task, args=(filename, user_id, tag_text), daemon=True)
+        t.start()
+        queued += 1
 
     return jsonify({"message": f"Re-tagging {queued} item(s) in background.", "count": queued}), 202
 
@@ -401,17 +437,25 @@ def reprocess_icons():
         return jsonify({"message": "No items to reprocess.", "count": 0}), 200
 
     queued = 0
-    for filename, filepath in rows:
-        if filepath and os.path.isfile(filepath):
-            t = threading.Thread(target=_run_ai_pipeline, args=(filepath, filename, user_id, ""), daemon=True)
-            t.start()
-            queued += 1
-        else:
-            guessed = os.path.join(UPLOAD_FOLDER, str(user_id), filename)
-            if os.path.isfile(guessed):
-                t = threading.Thread(target=_run_ai_pipeline, args=(guessed, filename, user_id, ""), daemon=True)
-                t.start()
-                queued += 1
+    for filename, _stored_filepath in rows:
+        if not filename:
+            continue
+
+        def _reprocess_task(fn, uid):
+            fp = _ensure_local_file(uid, fn)
+            if not fp:
+                print(f"⚠️  reprocess: no file found for {fn}")
+                return
+            is_temp = not fp.startswith(os.path.join(UPLOAD_FOLDER, str(uid)))
+            try:
+                _run_ai_pipeline(fp, fn, uid, "")
+            finally:
+                if is_temp and os.path.exists(fp):
+                    os.remove(fp)
+
+        t = threading.Thread(target=_reprocess_task, args=(filename, user_id), daemon=True)
+        t.start()
+        queued += 1
 
     return jsonify({"message": f"Reprocessing {queued} item(s) in background.", "count": queued}), 202
 

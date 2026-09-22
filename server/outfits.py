@@ -1,7 +1,7 @@
 from flask import Blueprint, request, jsonify
 from services.auth_service import get_user_id_from_request
 from services.outfit_service import (
-    create_outfit, save_outfit_items, get_outfits, get_circle_outfits,
+    create_outfit, update_outfit, save_outfit_items, get_outfits, get_circle_outfits,
     delete_outfit, rate_outfit, add_feedback,
 )
 from services.recommendation_service import recommend_outfits
@@ -37,18 +37,44 @@ def create():
 
     outfit_id = create_outfit(user_id, name, occasion, tags, notes, is_private)
 
-    items = data.get("items", [])
-    # Backward compat: old clients sent { slots: { slot: closet_item_id } }
-    if not items:
-        slots = data.get("slots", {})
-        items = [
-            {"slot": s, "closet_item_id": cid, "catalog_data": None, "nudge_x": 0, "nudge_y": 0}
-            for s, cid in slots.items() if cid is not None
-        ]
+    items = _items_from_payload(data)
     if items:
         save_outfit_items(outfit_id, items)
 
     return jsonify({"id": outfit_id, "message": "Outfit saved"}), 201
+
+
+@outfits_bp.route("/<int:outfit_id>", methods=["PUT"])
+def update(outfit_id):
+    user_id = get_user_id_from_request(request)
+    if not user_id:
+        return jsonify({"message": "Unauthorized"}), 401
+
+    data = request.get_json() or {}
+    ok = update_outfit(
+        outfit_id, user_id,
+        name=data.get("name", "My Outfit"),
+        occasion=data.get("occasion"),
+        tags=data.get("tags"),
+        notes=data.get("notes"),
+        is_private=bool(data.get("is_private", False)),
+    )
+    if not ok:
+        return jsonify({"message": "Not found"}), 404
+
+    save_outfit_items(outfit_id, _items_from_payload(data))
+    return jsonify({"id": outfit_id, "message": "Outfit updated"}), 200
+
+
+def _items_from_payload(data):
+    items = data.get("items", [])
+    # Backward compat: old clients sent { slots: { slot: closet_item_id } }
+    if not items:
+        items = [
+            {"slot": s, "closet_item_id": cid, "catalog_data": None, "nudge_x": 0, "nudge_y": 0, "scale": 1.0}
+            for s, cid in (data.get("slots") or {}).items() if cid is not None
+        ]
+    return items
 
 
 @outfits_bp.route("/<int:outfit_id>", methods=["DELETE"])

@@ -1,14 +1,14 @@
 scraped:
 
 abercrombie 
-alo 
+alo - rewritten properly (need to modify for gender column)
 boohooman 
 brandy melville 
 cotton on
 essentials 
 forever 21
-gymshark 
-h&m 
+gymshark - rewritten properly (need to run)
+h&m - rewritten properly (need to run)
 hollister 
 nike 
 princess polly 
@@ -57,12 +57,12 @@ tory burch
 michael kors 
 vans
 north face
-eric emanuel - 
-palace skateboards 
+eric emanuel
 awake ny
-j. crew 
-madewell 
-gap 
+j. crew
+madewell
+alo (need to run scraper again)
+gap -
 quicksilver 
 billabong 
 garage
@@ -75,6 +75,7 @@ shein
 romwe
 urban outfitters 
 sp5der 
+palace skateboards 
 fix zara scraper (do next)
 bdg (see if urban outfitters already covers it or not)
 fila (store on pause rn, come back later)

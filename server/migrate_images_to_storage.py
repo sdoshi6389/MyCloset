@@ -14,7 +14,7 @@ import sys
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 
 from db import get_supa
-from storage_utils import upload_file, ensure_bucket, BUCKET
+from storage_utils import upload_file, upload_icon, ensure_bucket, BUCKET
 
 ensure_bucket()
 supa = get_supa()
@@ -44,7 +44,7 @@ for r in rows:
     # Icon → icons/{basename}  (re-encoded to WebP, ~5x smaller, same resolution)
     if ip and os.path.isfile(ip):
         icon_key = ip.replace("\\", "/").split("/")[-1]
-        if upload_file(ip, f"icons/{icon_key}", webp=True):
+        if upload_icon(ip, icon_key)[0]:
             ok_icon += 1
         else:
             miss_icon += 1

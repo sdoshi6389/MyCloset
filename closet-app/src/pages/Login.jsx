@@ -15,9 +15,12 @@ export default function Login() {
   const location = useLocation();
 
   // Show "session expired" message if redirected with that flag
+  // Handles both React Router state (from ProtectedRoute) and ?expired=1 (from apiClient interceptor)
   useEffect(() => {
-    if (location.state?.expired) setError("Your session expired. Please log in again.");
-  }, [location.state]);
+    if (location.state?.expired || new URLSearchParams(location.search).get("expired")) {
+      setError("Your session expired. Please log in again.");
+    }
+  }, [location.state, location.search]);
 
   // Redirect already-logged-in users (only if token is still valid)
   useEffect(() => {
@@ -60,6 +63,7 @@ export default function Login() {
       if (data.token) {
         localStorage.setItem("token", data.token);
         localStorage.setItem("userEmail", data.email || "");
+        if (data.user_id != null) localStorage.setItem("userId", String(data.user_id));
         navigate("/closet", { replace: true });
       } else {
         setError(data.message || "Something went wrong.");

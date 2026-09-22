@@ -247,6 +247,7 @@ def score_candidate(
     target_slot: str,
     filled_slots: set[str],
     faiss_distance: float | None = None,
+    target_occasion: str | None = None,
 ) -> dict:
     """
     Full 7-factor score for any candidate (closet OR catalog).
@@ -254,7 +255,7 @@ def score_candidate(
 
     For closet items supply vector_embedding in candidate.
     For catalog items supply faiss_distance (distance from FAISS query).
-    Graceful fallbacks for any missing data.
+    target_occasion: if set, items whose occasion field matches get a vibe_match boost.
     """
     outfit_emb      = _outfit_embedding(outfit_items)
     outfit_tags     = _outfit_vibe_tags(outfit_items)
@@ -280,8 +281,13 @@ def score_candidate(
     # ── Factor 2: color harmony ────────────────────────────────────────────
     ch = _score_color_harmony(candidate, outfit_items)
 
-    # ── Factor 3: vibe match ───────────────────────────────────────────────
+    # ── Factor 3: vibe match (+ occasion alignment bonus) ─────────────────
     vm = _score_vibe_match(cand_tags, outfit_tags, profile.get("vibe_weights") or {})
+    if target_occasion:
+        cand_occasions = _parse_tags(candidate.get("occasion"))
+        # e.g. candidate tagged "campus, casual" matches target "campus"
+        if any(target_occasion.lower() in o for o in cand_occasions):
+            vm = min(1.0, vm + 0.15)
 
     # ── Factor 4: user preference ──────────────────────────────────────────
     up = _score_user_preference(candidate_vec, cand_tags, profile)

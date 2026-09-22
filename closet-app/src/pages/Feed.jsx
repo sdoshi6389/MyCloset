@@ -12,15 +12,26 @@ export default function Feed() {
   const [caption, setCaption] = useState("");
   const [visibility, setVisibility] = useState("friends");
   const [images, setImages] = useState([]);
+  const [imagePreviews, setImagePreviews] = useState([]);
   const [loading, setLoading] = useState(false);
   const [offset, setOffset] = useState(0);
+  const [hasMore, setHasMore] = useState(false);
   const LIMIT = 20;
   const token = localStorage.getItem("token");
+  const currentEmail = localStorage.getItem("userEmail") || "";
   const { activeCircle, setActiveCircle } = useCircle();
 
   const authH = () => ({ Authorization: `Bearer ${token}` });
 
   useEffect(() => { fetchFeed(0); }, [activeCircle]);
+
+  // Revoke object URLs when compose modal closes to avoid memory leaks
+  useEffect(() => {
+    if (!showCompose) {
+      imagePreviews.forEach((url) => URL.revokeObjectURL(url));
+      setImagePreviews([]);
+    }
+  }, [showCompose]);
 
   const fetchFeed = async (newOffset = 0) => {
     try {
@@ -31,13 +42,22 @@ export default function Feed() {
         headers: authH(),
         params: { limit: LIMIT, offset: newOffset },
       });
+      const fetched = res.data || [];
       if (newOffset === 0) {
-        setPosts(res.data);
+        setPosts(fetched);
       } else {
-        setPosts((prev) => [...prev, ...res.data]);
+        setPosts((prev) => [...prev, ...fetched]);
       }
       setOffset(newOffset + LIMIT);
+      setHasMore(fetched.length === LIMIT);
     } catch (e) { console.error(e); }
+  };
+
+  const handleImageChange = (e) => {
+    const files = Array.from(e.target.files);
+    setImages(files);
+    // Generate preview URLs for selected images
+    setImagePreviews(files.map((f) => URL.createObjectURL(f)));
   };
 
   const createPost = async () => {
@@ -51,6 +71,7 @@ export default function Feed() {
       await axios.post(`${API}/feed`, fd, { headers: authH() });
       setCaption("");
       setImages([]);
+      setVisibility("friends");
       setShowCompose(false);
       fetchFeed(0);
     } catch (e) {
@@ -141,10 +162,22 @@ export default function Feed() {
                   accept="image/*"
                   multiple
                   style={{ display: "none" }}
-                  onChange={(e) => setImages(Array.from(e.target.files))}
+                  onChange={handleImageChange}
                 />
-                📁 {images.length ? `${images.length} image(s)` : "Choose images"}
+                📁 {images.length ? `${images.length} image(s) selected` : "Choose images"}
               </label>
+              {imagePreviews.length > 0 && (
+                <div style={{ display: "flex", gap: 8, marginTop: 8, flexWrap: "wrap" }}>
+                  {imagePreviews.map((src, i) => (
+                    <img
+                      key={i}
+                      src={src}
+                      alt=""
+                      style={{ width: 72, height: 72, objectFit: "cover", borderRadius: 6, border: "1px solid #333" }}
+                    />
+                  ))}
+                </div>
+              )}
             </div>
 
             <div style={{ display: "flex", gap: 8, marginTop: 4 }}>
@@ -169,6 +202,7 @@ export default function Feed() {
           <PostCard
             key={post.id}
             post={post}
+            currentEmail={currentEmail}
             onLike={() => toggleLike(post.id)}
             onDelete={() => deletePost(post.id)}
             formatDate={formatDate}
@@ -176,7 +210,7 @@ export default function Feed() {
         ))}
       </div>
 
-      {posts.length >= LIMIT && (
+      {hasMore && (
         <div style={{ textAlign: "center", marginTop: 24 }}>
           <button className="btn-secondary" onClick={() => fetchFeed(offset)}>
             Load more
@@ -187,31 +221,40 @@ export default function Feed() {
   );
 }
 
-function PostCard({ post, onLike, onDelete, formatDate }) {
-  const email = post.author_email || post.user_email || "?";
+function PostCard({ post, currentEmail, onLike, onDelete, formatDate }) {
+  const email = post.author_email || post.user_email || null;
+  const initial = email ? email[0].toUpperCase() : "?";
+  const isOwner = email && currentEmail && email.toLowerCase() === currentEmail.toLowerCase();
 
   return (
     <div className="post-card">
       {/* Header */}
       <div className="post-header">
-        <div className="post-avatar">{email[0].toUpperCase()}</div>
+        <div className="post-avatar">{initial}</div>
         <div className="post-meta">
-          <span className="post-author">{email}</span>
+          <span className="post-author">{email || "Unknown"}</span>
           <span className="post-date">{formatDate(post.created_at)}</span>
         </div>
         <span className="post-visibility">{VISIBILITY_BADGE[post.visibility] || post.visibility}</span>
-        <button className="btn-danger" style={{ marginLeft: "auto", padding: "4px 8px", fontSize: "0.72rem" }} onClick={onDelete}>
-          Delete
-        </button>
+        {isOwner && (
+          <button
+            className="btn-danger"
+            style={{ marginLeft: "auto", padding: "4px 8px", fontSize: "0.72rem" }}
+            onClick={onDelete}
+          >
+            Delete
+          </button>
+        )}
       </div>
 
       {/* Images */}
       {post.images?.length > 0 && (
         <div className={`post-images count-${Math.min(post.images.length, 3)}`}>
           {post.images.slice(0, 3).map((src, i) => {
-            const imgUrl = typeof src === "object"
-              ? `${API}${src.url}`
-              : `${API}/feed/images/${src.split(/[\\/]/).pop()}`;
+            const raw = typeof src === "object" ? (src.url || "") : (src || "");
+            const imgUrl = raw.startsWith("http")
+              ? raw
+              : `${API}/feed/images/${raw.split(/[\\/]/).pop()}`;
             return <img key={i} src={imgUrl} alt="" />;
           })}
         </div>

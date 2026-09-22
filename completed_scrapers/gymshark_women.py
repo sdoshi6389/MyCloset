@@ -1,203 +1,174 @@
+"""Gymshark women's scraper — Shopify site (products.json is 404, so DOM scraping).
+Collection URLs discovered from /pages/shop-women filtered to /womens paths.
+Each collection page is fully scrolled to load all tiles.
+PDP is visited once per product; all color swatches extracted from aria-label → one row per color.
+"""
 from playwright.sync_api import sync_playwright
+from playwright_stealth import Stealth
 import time
 import sys, os
 sys.path.insert(0, os.path.dirname(__file__))
 from db_insert import ensure_table, insert_products
 
 TABLE = "products_gymshark_womens"
+BASE  = "https://www.gymshark.com"
+HUB   = f"{BASE}/pages/shop-women"
 
-def click_view_all_if_present(page):
+TEST = "--test" in sys.argv  # python gymshark_women.py --test  (1 collection, 3 PDPs)
+
+
+def p(*args):
     try:
-        view_all = page.query_selector("a:has-text('View All')")
-        if view_all:
-            print("✅ Clicking 'View All'...")
-            view_all.click()
-            page.wait_for_timeout(3000)
-            return
-        load_more = page.query_selector("button:has-text('Load More')")
-        if load_more:
-            print("✅ Clicking 'Load More'...")
-            load_more.click()
-            page.wait_for_timeout(3000)
-    except Exception as e:
-        print(f"⚠️ View/Load button click error: {e}")
+        print(*args, flush=True)
+    except UnicodeEncodeError:
+        print(*(str(a).encode("ascii", "replace").decode() for a in args), flush=True)
+
+
+def make_page(context):
+    page = context.new_page()
+    Stealth().apply_stealth_sync(page)
+    return page
+
 
 def scroll_to_bottom(page):
     previous_height = 0
-    for i in range(30):
+    for _ in range(40):
         page.mouse.wheel(0, 4000)
-        time.sleep(1.5)
+        time.sleep(1.2)
         current_height = page.evaluate("document.body.scrollHeight")
         if current_height == previous_height:
             break
         previous_height = current_height
 
-def get_color_variant_urls(page):
-    swatches = page.query_selector_all("a[aria-label][href*='/products/']")
-    urls = set()
-    for swatch in swatches:
-        href = swatch.get_attribute("href")
-        if href:
-            if href.startswith("http"):
-                urls.add(href)
-            else:
-                urls.add(f"https://www.gymshark.com{href}")
-    return list(urls)
 
 def get_collection_links(page):
-    print("🔍 Finding all collection links on /shop-women page...")
-    links = []
-    tiles = page.query_selector_all("a:has-text('SHOP NOW')")
+    p(f"Finding women's collections from {HUB}...")
+    page.goto(HUB, timeout=60000)
+    page.wait_for_timeout(4000)
+    scroll_to_bottom(page)
+    links = page.evaluate("""() => {
+        return Array.from(document.querySelectorAll('a[href*="/collections/"]'))
+            .map(a => a.href.split('?')[0])
+            .filter(h => h.includes('/womens') || h.includes('womens-'));
+    }""")
+    links = list(set(links))
+    p(f"Found {len(links)} women's collections")
+    return links
 
-    for i, tile in enumerate(tiles):
-        try:
-            href = tile.get_attribute("href")
-            if href and "/collections/" in href:
-                full_url = f"https://www.gymshark.com{href}" if href.startswith("/") else href
-                print(f"✅ Found collection #{i+1}: {full_url}")
-                links.append(full_url)
-        except Exception as e:
-            print(f"❌ Error extracting collection link: {e}")
-    
-    return list(set(links))
 
-def scrape_product_detail(page, url):
-    try:
-        page.goto(url, timeout=60000)
-        page.wait_for_timeout(2000)
-
-        # 🏷️ Title (use h1 or fallback)
-        title_elem = page.query_selector("h1[data-testid='product-title']") or page.query_selector("h1")
-        title = title_elem.inner_text().strip() if title_elem else "MISSING_TITLE"
-
-        # 💵 Price (with cleanup)
-        price_elem = page.query_selector("span[class*='product-price']") or page.query_selector("span[data-testid='product-price']")
-        price = price_elem.inner_text().strip().replace("\n", " ") if price_elem else "MISSING_PRICE"
-
-        # 🎨 Color
-        color_elem = page.query_selector("p[data-testid^='plp-productColour'], span[data-testid^='product-colour']")
-        color = color_elem.inner_text().strip() if color_elem else "MISSING_COLOR"
-
-        # 🖼️ Product image – real one, not SVG/logo
-        image_elem = page.query_selector("img[src*='cdn.shopify.com']")
-        image_url = image_elem.get_attribute("src") if image_elem else "MISSING_IMAGE"
-
-        print({
-            "title": title,
-            "price": price,
-            "color": color,
-            "url": url,
-            "image": image_url
-        })
-
-        return {
-            "title": title,
-            "price": price,
-            "color": color,
-            "url": url,
-            "image": image_url
-        }
-
-    except Exception as e:
-        print(f"❌ Failed PDP scrape: {e}")
-        return None
-
-def scrape_products_from_collection(context, collection_url, visited_urls):
-    print(f"\n🌐 Visiting collection: {collection_url}")
-    page = context.new_page()
+def get_product_urls(page, collection_url):
     page.goto(collection_url, timeout=60000)
     page.wait_for_timeout(3000)
-
-    click_view_all_if_present(page)
     scroll_to_bottom(page)
+    urls = page.evaluate("""() => {
+        return Array.from(document.querySelectorAll('a[href*="/products/"]'))
+            .map(a => a.href.split('?')[0])
+            .filter(h => h.includes('gymshark.com/products/'));
+    }""")
+    return list(set(urls))
 
-    product_cards = page.query_selector_all("article[class^='product-card_product-card']")
-    print(f"🧾 Found {len(product_cards)} base products")
 
-    products = []
-    pdp_urls = []
+def scrape_pdp(page, url):
+    try:
+        page.goto(url, timeout=60000)
+        page.wait_for_timeout(2500)
+        return page.evaluate("""(pageUrl) => {
+            const titleEl = document.querySelector('h1');
+            const title = titleEl ? titleEl.innerText.trim() : '';
 
-    for card in product_cards:
-        pdp_link = card.query_selector("a[href*='/products/']")
-        if not pdp_link:
-            continue
-        href = pdp_link.get_attribute("href")
-        if not href:
-            continue
-        full_url = f"https://www.gymshark.com{href}" if href.startswith("/") else href
-        pdp_urls.append(full_url)
+            const priceEl = document.querySelector('[data-testid="product-price"]') ||
+                            document.querySelector('[class*="product-price"]');
+            const priceRaw = priceEl ? priceEl.innerText.trim() : '';
+            const m = priceRaw.match(/\\$[\\d.]+/);
+            const price = m ? m[0] : priceRaw.replace('Regular Price:', '').trim();
 
-    page.close()
+            // Collect all gallery images from Shopify analytics meta, fall back to DOM
+            let images = [];
+            try {
+                const meta = window.ShopifyAnalytics?.meta?.product?.images;
+                if (Array.isArray(meta) && meta.length) {
+                    images = meta.map(u => u.startsWith('//') ? 'https:' + u : u);
+                }
+            } catch(e) {}
+            if (!images.length) {
+                const seen = new Set();
+                document.querySelectorAll('img[src*="cdn.shopify.com"]').forEach(img => {
+                    const src = img.src.split('?')[0];
+                    if (src && !seen.has(src)) { seen.add(src); images.push(src); }
+                });
+            }
+            const image = images[0] || '';
 
-    for i, pdp_url in enumerate(pdp_urls):
-        if pdp_url in visited_urls:
-            continue
+            const swatches = Array.from(document.querySelectorAll('a[aria-label][href*="/products/"]'));
+            const rows = swatches.map(s => {
+                const label = s.getAttribute('aria-label') || '';
+                const color = label.includes(' in ') ? label.split(' in ').pop() : '';
+                return {title, price, color, url: s.href.split('?')[0], image, images, gender: 'women'};
+            }).filter(r => r.url && r.title);
 
-        print(f"🛍️ Visiting base PDP #{i+1}: {pdp_url}")
-        pdp_page = context.new_page()
-        pdp_page.goto(pdp_url, timeout=60000)
-        pdp_page.wait_for_timeout(2000)
+            return rows.length ? rows : [{title, price, color: '', url: pageUrl, image, images, gender: 'women'}];
+        }""", url)
+    except Exception as e:
+        p(f"  PDP error {url}: {e}")
+        return []
 
-        variant_urls = get_color_variant_urls(pdp_page)
-        # Include the base PDP first
-        variant_urls = [pdp_url] + [url for url in variant_urls if url != pdp_url]
-        pdp_page.close()
-
-        product_count_before = len(products)
-
-        for variant_url in variant_urls:
-            if variant_url in visited_urls:
-                continue
-            visited_urls.add(variant_url)
-
-            try:
-                print(f"🎨 Visiting color variant: {variant_url}")
-                variant_page = context.new_page()
-                info = scrape_product_detail(variant_page, variant_url)
-                variant_page.close()
-                if info:
-                    products.append(info)
-            except Exception as e:
-                print(f"❌ Failed variant scrape: {e}")
-
-        product_count_after = len(products)
-        scraped_count = product_count_after - product_count_before
-
-        if scraped_count == 0:
-            print(f"❌ No color variants scraped for base PDP #{i+1}")
-        else:
-            print(f"✅ Scraped {scraped_count} variant(s) for base PDP #{i+1}")
-
-    return products
 
 def main():
-    all_products = []
+    ensure_table(TABLE)
+    p(f"Gymshark women's scraper -> {TABLE}" + (" [TEST MODE]" if TEST else ""))
+
+    total_ins = total_skip = 0
     visited_urls = set()
 
-    with sync_playwright() as p:
-        browser = p.chromium.launch(headless=False)
-        context = browser.new_context()
-        page = context.new_page()
+    with sync_playwright() as pw:
+        browser = pw.chromium.launch(headless=True)
+        ctx = browser.new_context(
+            user_agent=(
+                "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 "
+                "(KHTML, like Gecko) Chrome/125.0.0.0 Safari/537.36"
+            ),
+            locale="en-US",
+            viewport={"width": 1280, "height": 900},
+        )
 
-        # Step 1: Go to the shop-women page
-        print("🌐 Opening: https://www.gymshark.com/pages/shop-women")
-        page.goto("https://www.gymshark.com/pages/shop-women", timeout=60000)
-        page.wait_for_timeout(3000)
+        nav_page = make_page(ctx)
+        collection_links = get_collection_links(nav_page)
 
-        # Step 2: Extract all /collections links
-        collection_links = get_collection_links(page)
+        tested = 0
+        for ci, collection_url in enumerate(collection_links, 1):
+            p(f"\n[{ci}/{len(collection_links)}] Collection: {collection_url}")
+            product_urls = get_product_urls(nav_page, collection_url)
+            p(f"  {len(product_urls)} unique products found")
+            if not product_urls:
+                p("  (empty/editorial — skipping)")
+                continue
 
-        # Step 3: Scrape each collection page
-        for collection_url in collection_links:
-            products = scrape_products_from_collection(context, collection_url, visited_urls)
-            all_products.extend(products)
+            pdp_limit = 3 if TEST else len(product_urls)
+            pdp_page = make_page(ctx)
+            for i, pdp_url in enumerate(product_urls[:pdp_limit]):
+                if pdp_url in visited_urls:
+                    continue
+                visited_urls.add(pdp_url)
+                rows = scrape_pdp(pdp_page, pdp_url)
+                if rows:
+                    ins, skip = insert_products(TABLE, rows)
+                    total_ins  += ins
+                    total_skip += skip
+                    p(f"  [{i+1}/{min(pdp_limit, len(product_urls))}] {rows[0]['title']} "
+                      f"| {len(rows)} color(s) | {ins} ins, {skip} skip")
+            pdp_page.close()
 
+            if TEST:
+                tested += 1
+                if tested >= 1:
+                    break
+
+        nav_page.close()
         browser.close()
 
-    # Step 4: Save to DB
-    ensure_table(TABLE)
-    ins, skip = insert_products(TABLE, all_products)
-    print(f"\nDone! {ins} inserted, {skip} skipped (already in DB).")
+    p(f"\n{'='*60}")
+    p(f"DONE! {total_ins} inserted, {total_skip} skipped")
+
 
 if __name__ == "__main__":
     main()

@@ -12,7 +12,7 @@ bp = Blueprint("generate_dressed_mannequin", __name__)
 # ======================================================
 # CONFIG
 # ======================================================
-from config import REPLICATE_API_TOKEN
+from config import REPLICATE_API_TOKEN, JWT_SECRET
 REPLICATE_TOKEN = REPLICATE_API_TOKEN
 REPLICATE_MODEL = "cuuupid/idm-vton:0513734a452173b8173e907e3a59d19a36266e55b48528559432bd21c7d7e985"
 GSAM_VERSION = "ee871c19efb1941f55f66a3d7d960428c8a5afcb77449547fe8e5a3ab9ebc21c"
@@ -32,7 +32,7 @@ SLOT_ORDER = {
     "outer_bottom": {"category": "lower", "order": 35},
 }
 
-SECRET_KEY = "supersecretkey"
+SECRET_KEY = JWT_SECRET
 
 # ======================================================
 # DB Helpers
@@ -53,11 +53,21 @@ def get_item_by_id(user_id: int, item_id: int):
 # ======================================================
 # Helpers
 # ======================================================
+class ReplicateAuthError(RuntimeError):
+    """Replicate rejected our credentials — a config problem, not a user error."""
+
+
 def _replicate_headers():
     return {
         "Authorization": f"Token {REPLICATE_TOKEN}",
         "Content-Type": "application/json",
     }
+
+
+def _raise_for_replicate(resp):
+    if resp.status_code in (401, 403):
+        raise ReplicateAuthError("Replicate rejected the API token")
+    raise RuntimeError(f"Replicate error {resp.status_code}")
 
 
 def _poll_until_done(status_url, timeout_s=240):
@@ -81,7 +91,7 @@ def _replicate_predict_model(model_tag: str, inputs: dict):
     payload = {"version": model_tag, "input": inputs}
     r = requests.post(url, headers=_replicate_headers(), json=payload, timeout=120)
     if not r.ok:
-        raise RuntimeError(f"Replicate error {r.status_code}: {r.text}")
+        _raise_for_replicate(r)
     js = r.json()
     return _poll_until_done(js["urls"]["get"])
 
@@ -154,9 +164,8 @@ def idm_vton_tryon(human_path: str, cloth_path: str, garment_desc="clothing item
     payload = {"version": REPLICATE_MODEL, "input": inputs}
     r = requests.post(url, headers=_replicate_headers(), json=payload)
     if not r.ok:
-        raise RuntimeError(f"Replicate error {r.status_code}: {r.text}")
+        _raise_for_replicate(r)
     js = r.json()
-    print("gets till here")
     result = _poll_until_done(js["urls"]["get"])
     out = result.get("output")
     if isinstance(out, str):
@@ -203,6 +212,11 @@ def generate_dressed_mannequin():
     stages.sort(key=lambda x: x[0])
 
     mannequin_path = os.path.join("static", "mannequin_base.png")
+    if not os.path.exists(mannequin_path):
+        return jsonify({
+            "error": "Virtual try-on is not yet configured — mannequin_base.png is missing from the server.",
+            "hint": "Upload a front-facing mannequin image to server/static/mannequin_base.png to enable this feature."
+        }), 503
     base_rgb = Image.open(mannequin_path).convert("RGB")
 
     garments_used = []
@@ -230,8 +244,15 @@ def generate_dressed_mannequin():
 
             garments_used.append({"slot": slot, "result_stage": result_url})
 
+        except ReplicateAuthError:
+            return jsonify({
+                "error": "Virtual try-on is unavailable — the Replicate API token is invalid or expired.",
+                "hint": "Set a valid REPLICATE_API_TOKEN in the server environment to enable this feature.",
+            }), 503
         except Exception as e:
-            return jsonify({"error": f"{slot} failed: {e}"}), 500
+            # Don't echo raw upstream response bodies back to the client
+            print(f"❌ VTON {slot} failed: {type(e).__name__}: {e}")
+            return jsonify({"error": f"Virtual try-on failed while processing {slot}."}), 502
 
     final_rel = f"final/{user_id}_mannequin_dressed.jpg"
     os.makedirs(os.path.join(PROCESSED_DIR, "final"), exist_ok=True)

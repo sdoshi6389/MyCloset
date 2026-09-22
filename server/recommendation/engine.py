@@ -24,7 +24,9 @@ SLOT_CATEGORIES: dict[str, list[str]] = {
     "right_shoe":   ["Shoes"],
     "hat":          ["Accessories"],
     "necklace":     ["Accessories"],
-    "bracelet":     ["Accessories"],
+    "bracelet":       ["Accessories"],
+    "bracelet_left":  ["Accessories"],
+    "bracelet_right": ["Accessories"],
     "bag":          ["Accessories"],
     "innerwear":    ["Innerwear"],
     "underwear":    ["Innerwear"],
@@ -41,7 +43,9 @@ SLOT_KEYWORDS: dict[str, str] = {
     "right_shoe":   "shoes sneakers",
     "hat":          "hat cap",
     "necklace":     "necklace chain",
-    "bracelet":     "bracelet watch",
+    "bracelet":       "bracelet watch",
+    "bracelet_left":  "bracelet watch",
+    "bracelet_right": "bracelet watch",
     "bag":          "bag",
     "innerwear":    "undershirt bra",
     "underwear":    "underwear boxers",
@@ -51,13 +55,22 @@ API_BASE = os.getenv("PUBLIC_BASE_URL", "http://localhost:5000")
 
 # Slots that share a DB category with at least one other slot — need zone-level filter
 _SHARED_CATEGORY_SLOTS = {
-    "hat", "necklace", "bracelet", "bag",
+    "hat", "necklace", "bracelet", "bracelet_left", "bracelet_right", "bag",
     "innerwear", "underwear",
     "inner_bottom", "outer_bottom", "shorts",
 }
 
 # Candidate pool size for FAISS catalog retrieval
 FAISS_POOL_K = 250
+
+# _infer_slot() returns one canonical name per garment kind, so paired/duplicated
+# slots must be normalised before comparing against it or the filter drops every
+# candidate.
+_SLOT_INFER_ALIAS = {
+    "bracelet_left":  "bracelet",
+    "bracelet_right": "bracelet",
+    "right_shoe":     "left_shoe",
+}
 
 
 # ── Slot inference (mirrors frontend inferZone) ───────────────────────────────
@@ -112,16 +125,19 @@ def _parse_tags(s) -> list[str]:
 
 # ── Output formatters ─────────────────────────────────────────────────────────
 def _format_closet_item(row: dict, user_id: int, scored: dict, reason: str) -> dict:
+    from storage_utils import public_url, thumb_url
     icon_path = row.get("icon_path")
-    fname = os.path.basename(icon_path) if icon_path else None
+    # basename() won't strip a Windows "icon_outputs\" prefix on Linux
+    fname = icon_path.replace("\\", "/").split("/")[-1] if icon_path else None
     return {
         "id":              row["id"],
         "title":           row.get("matched_title") or row.get("caption") or row.get("type") or "Item",
         "brand":           row.get("brand"),
         "color":           row.get("color"),
         "category":        row.get("category"),
-        "icon_url":        f"/icons/{fname}" if fname else None,
-        "image_url":       f"/static/{user_id}/{row['filename']}",
+        "icon_url":        public_url(f"icons/{fname}") if fname else None,
+        "thumb_url":       thumb_url(fname) if fname else None,
+        "image_url":       public_url(f"{user_id}/{row['filename']}"),
         "price":           None,
         "shop_url":        None,
         "source":          "closet",
@@ -150,7 +166,8 @@ def _format_catalog_item(hit: dict, scored: dict, reason: str) -> dict:
 
 
 # ── FAISS text query builder ──────────────────────────────────────────────────
-def _build_text_query(slot: str, outfit_items: list[dict], profile: dict) -> str:
+def _build_text_query(slot: str, outfit_items: list[dict], profile: dict,
+                      occasion: str | None = None) -> str:
     vibes = []
     for item in outfit_items:
         vibes.extend(_parse_tags(item.get("vibe")))
@@ -163,17 +180,22 @@ def _build_text_query(slot: str, outfit_items: list[dict], profile: dict) -> str
         if v not in seen:
             seen.add(v)
             unique.append(v)
-    return f"{' '.join(unique[:2])} {SLOT_KEYWORDS.get(slot, 'clothing item')}".strip()
+    base = f"{' '.join(unique[:2])} {SLOT_KEYWORDS.get(slot, 'clothing item')}".strip()
+    # Prepend target occasion so FAISS results bias toward the right use-case
+    if occasion:
+        return f"{occasion} {base}"
+    return base
 
 
 # ── DB helpers ────────────────────────────────────────────────────────────────
-def _fetch_item_meta(item_id: int) -> dict | None:
-    supa = get_supa()
-    res = supa.table("closet_items").select(
+def _fetch_items_meta(item_ids: list[int]) -> dict[int, dict]:
+    if not item_ids:
+        return {}
+    res = get_supa().table("closet_items").select(
         "id, type, matched_title, category, color, vibe, style, season, formality_score, "
         "occasion, vector_embedding"
-    ).eq("id", item_id).execute()
-    return res.data[0] if res.data else None
+    ).in_("id", list(set(item_ids))).execute()
+    return {r["id"]: r for r in (res.data or [])}
 
 
 def _closet_candidates(user_id: int, slot: str, placed_ids: set[int], gender: str | None = None) -> list[dict]:
@@ -207,28 +229,31 @@ def _closet_candidates(user_id: int, slot: str, placed_ids: set[int], gender: st
     print(f"🗄  closet slot={slot} db={len(all_rows)} "
           f"→placed={after_placed} →gender={len(candidates)}", end="")
     if slot in _SHARED_CATEGORY_SLOTS:
-        filtered = [c for c in candidates if _infer_slot(c) == slot]
+        want = _SLOT_INFER_ALIAS.get(slot, slot)
+        filtered = [c for c in candidates if _infer_slot(c) == want]
         print(f" →infer={len(filtered)}")
         return filtered
     print()
     return candidates
 
 
-def _catalog_candidates(slot: str, outfit_items: list[dict], profile: dict, gender: str | None = None) -> list[dict]:
+def _catalog_candidates(slot: str, outfit_items: list[dict], profile: dict,
+                        gender: str | None = None, occasion: str | None = None) -> list[dict]:
     from callable_embedding import encode_text
     from callable_faiss import search_similar_products
 
-    query = _build_text_query(slot, outfit_items, profile)
-    print(f"🔍 Catalog query for '{slot}': \"{query}\" gender={gender}")
+    query = _build_text_query(slot, outfit_items, profile, occasion=occasion)
+    print(f"🔍 Catalog query for '{slot}': \"{query}\" gender={gender} occasion={occasion}")
     query_vec = encode_text(query)
     hits = search_similar_products(query_vec, brand=None, top_k=FAISS_POOL_K, gender=gender)
 
+    want = _SLOT_INFER_ALIAS.get(slot, slot)
     filtered = [
         h for h in hits
         if _infer_slot({
             "matched_title": h.get("title", ""),
             "type": "", "category": "", "subcategory": ""
-        }) == slot
+        }) == want
     ]
     return filtered
 
@@ -289,15 +314,16 @@ def get_recommendations(
     mode: str = "closet",
     top_k: int = 5,
     gender: str | None = None,
+    outfit_name: str | None = None,
+    occasion: str | None = None,
 ) -> dict:
     """
     outfit: { slot: { id, ... metadata ... } | None }
     fill_slots: list of slot ids to fill; None = all empty slots with known categories
     mode: "closet" | "catalog"
+    outfit_name: user-facing name for the look (e.g. "Campus Casual Look")
+    occasion: target occasion from outfit editorial (e.g. "campus", "office")
     Returns: { "recommendations": { slot: [ item_dict ] } }
-
-    Each item dict includes: id, title, brand, color, icon_url, image_url,
-    price, shop_url, source, score, score_breakdown, reason.
     """
     profile = get_user_profile(user_id)
 
@@ -306,15 +332,18 @@ def get_recommendations(
     gender = _GENDER_MAP.get(gender) if gender else None
 
     # ── Build outfit context ───────────────────────────────────────────────
+    # One batched query for every placed item instead of one round-trip each —
+    # with a full outfit that alone was ~6 sequential Supabase calls.
     outfit_items: list[dict] = []
     placed_ids: set[int] = set()
-    for slot, item in (outfit or {}).items():
-        if item and item.get("id"):
-            full = _fetch_item_meta(item["id"])
-            if full:
-                merged = {**item, **{k: v for k, v in full.items() if v is not None}}
-                outfit_items.append(merged)
-                placed_ids.add(item["id"])
+    placed = [item for item in (outfit or {}).values() if item and item.get("id")]
+    meta_by_id = _fetch_items_meta([item["id"] for item in placed])
+    for item in placed:
+        full = meta_by_id.get(item["id"])
+        if full:
+            merged = {**item, **{k: v for k, v in full.items() if v is not None}}
+            outfit_items.append(merged)
+            placed_ids.add(item["id"])
 
     filled_slots = set(s for s, item in (outfit or {}).items() if item)
 
@@ -360,13 +389,14 @@ def get_recommendations(
                     profile=profile,
                     target_slot=slot,
                     filled_slots=filled_slots,
+                    target_occasion=occasion,
                 )
                 reason = generate_reason(result["breakdown"], c, outfit_items, slot)
                 formatted = _format_closet_item(c, user_id, result, reason)
                 scored_list.append(formatted)
 
         else:  # catalog
-            raw_hits = _catalog_candidates(slot, outfit_items, profile, gender=gender)
+            raw_hits = _catalog_candidates(slot, outfit_items, profile, gender=gender, occasion=occasion)
             scored_list = []
             for hit in raw_hits:
                 enriched = enrich_catalog_item(hit)
@@ -377,6 +407,7 @@ def get_recommendations(
                     target_slot=slot,
                     filled_slots=filled_slots,
                     faiss_distance=hit.get("distance", 1.0),
+                    target_occasion=occasion,
                 )
                 reason = generate_reason(result["breakdown"], enriched, outfit_items, slot)
                 formatted = _format_catalog_item(enriched, result, reason)
@@ -394,11 +425,18 @@ def get_recommendations(
         try:
             outfit_ctx = {
                 "filled_slots": list(filled_slots),
-                "mode": mode,
-                "item_count": len(outfit_items),
+                "mode":         mode,
+                "item_count":   len(outfit_items),
+                "outfit_name":  outfit_name,
+                "occasion":     occasion,
             }
             log_recommendations(user_id, slot, outfit_ctx, final)
         except Exception as e:
             print(f"⚠️  log_recommendations failed silently: {e}")
 
-    return {"recommendations": results}
+    out = {"recommendations": results}
+    if mode == "catalog":
+        # Lets the UI distinguish "no matches" from "index not loaded yet"
+        from callable_faiss import is_index_loaded
+        out["catalog_status"] = "ready" if is_index_loaded() else "unavailable"
+    return out

@@ -1,175 +1,186 @@
+"""H&M women's scraper.
+NOTE: H&M uses Cloudflare Bot Management which blocks headless browsers at the HTTP
+level (403). This scraper must run with headless=False. The browser window will be
+visible during the run.
+
+Category pages use a "Load next page" button for pagination.
+Each product PDP exposes per-color swatch links — one row is inserted per color
+with the color-specific URL.
+"""
 from playwright.sync_api import sync_playwright
-import time
+from playwright_stealth import Stealth
 import sys, os
 sys.path.insert(0, os.path.dirname(__file__))
 from db_insert import ensure_table, insert_products
 
-TABLE = "products_hm_womens"
+TABLE     = "products_hm_womens"
+BASE_URL  = "https://www2.hm.com"
+START_URL = f"{BASE_URL}/en_us/women.html"
 
-START_URL = "https://www2.hm.com/en_us/women.html"
-BASE_URL = "https://www2.hm.com"
+TEST = "--test" in sys.argv  # python handm_women.py --test  (1 category, 3 PDPs)
+
+
+def p(*args):
+    try:
+        print(*args, flush=True)
+    except UnicodeEncodeError:
+        print(*(str(a).encode("ascii", "replace").decode() for a in args), flush=True)
+
+
+def make_page(context):
+    page = context.new_page()
+    Stealth().apply_stealth_sync(page)
+    return page
+
 
 def get_category_links(page):
-    print("🔍 Collecting all women category + seasonal links...")
+    p("Collecting women's category links...")
     page.goto(START_URL, timeout=60000)
     page.wait_for_timeout(3000)
 
-    category_links = set()
-
-    # === A. Main category links from sidebar menu ===
-    sidebar_anchors = page.query_selector_all("ul.be3030 li a")
-    for a in sidebar_anchors:
-        href = a.get_attribute("href")
-        if href and "/en_us/women/products/" in href:
-            category_links.add(BASE_URL + href)
-
-    # === B. Seasonal/curated collection links ===
-    seasonal_anchors = page.query_selector_all("a[href*='/en_us/women/seasonal-trending/']")
-    for a in seasonal_anchors:
-        href = a.get_attribute("href")
+    links = set()
+    for a in page.query_selector_all("ul.be3030 li a"):
+        href = a.get_attribute("href") or ""
+        if "/en_us/women/products/" in href:
+            links.add(BASE_URL + href)
+    for a in page.query_selector_all("a[href*='/en_us/women/seasonal-trending/']"):
+        href = a.get_attribute("href") or ""
         if href:
-            full_url = BASE_URL + href if href.startswith("/") else href
-            category_links.add(full_url)
+            links.add(href if href.startswith("http") else BASE_URL + href)
 
-    print(f"✅ Found {len(category_links)} total category/seasonal links")
-    print(category_links)
-    return list(category_links)
+    # Fallback: scrape nav links if sidebar class changed
+    if not links:
+        p("  Sidebar class changed — falling back to nav link scan")
+        for a in page.query_selector_all("a[href*='/en_us/women/products/']"):
+            href = a.get_attribute("href") or ""
+            if href:
+                links.add(href if href.startswith("http") else BASE_URL + href)
+
+    p(f"Found {len(links)} category links")
+    return list(links)
 
 
-def scroll_and_collect_product_links(page):
-    print("📜 Starting product collection with pagination...")
-
+def collect_product_links(page):
     product_urls = set()
     previous_count = -1
 
     while True:
-        # 🧾 Collect product links
-        lis = page.query_selector_all("ul[data-elid='product-grid'] li")
-        print(f"🔍 Found {len(lis)} products so far...")
-        for li in lis:
-            a_tag = li.query_selector("a[href*='/productpage.']")
-            if a_tag:
-                href = a_tag.get_attribute("href")
+        for li in page.query_selector_all("ul[data-elid='product-grid'] li"):
+            a = li.query_selector("a[href*='/productpage.']")
+            if a:
+                href = a.get_attribute("href") or ""
                 if href:
-                    full_url = href if href.startswith("http") else BASE_URL + href
-                    product_urls.add(full_url)
+                    product_urls.add(href if href.startswith("http") else BASE_URL + href)
 
-        # Stop if no new products were added
         if len(product_urls) == previous_count:
-            print("✅ No new products loaded. Done with this category.")
             break
         previous_count = len(product_urls)
 
-        # Click "Load next page" if available
         try:
-            next_btn = page.query_selector("button[data-elid='pagination-hybrid-button']")
-            if next_btn:
-                is_disabled = next_btn.get_attribute("aria-disabled")
-                if is_disabled == "false":
-                    print("🔄 Clicking 'Load next page'...")
-                    next_btn.click()
-                    page.wait_for_timeout(3000)
-                else:
-                    print("⛔ Button exists but is disabled. Done.")
-                    break
+            btn = page.query_selector("button[data-elid='pagination-hybrid-button']")
+            if btn and btn.get_attribute("aria-disabled") == "false":
+                p(f"  Loading next page ({len(product_urls)} so far)...")
+                btn.click()
+                page.wait_for_timeout(3000)
             else:
-                print("🚫 No pagination button found.")
                 break
         except Exception as e:
-            print(f"⚠️ Pagination error: {e}")
+            p(f"  Pagination error: {e}")
             break
 
-    print(f"🧾 Total unique product URLs collected: {len(product_urls)}")
     return list(product_urls)
 
 
-def scrape_product_detail(page, url):
+def scrape_product(page, url):
     try:
         page.goto(url, timeout=60000)
         page.wait_for_timeout(2000)
 
-        # 🏷️ Title
-        title_elem = page.query_selector("h1")
-        title = title_elem.inner_text().strip() if title_elem else "MISSING_TITLE"
+        title_el = page.query_selector("h1")
+        title = title_el.inner_text().strip() if title_el else ""
 
-        # 💵 Price
-        price_elem = page.query_selector("span.e31b97")
-        price = price_elem.inner_text().strip() if price_elem else "MISSING_PRICE"
+        price_el = page.query_selector("span.e31b97")
+        price = price_el.inner_text().strip() if price_el else ""
 
-        # 🎨 All color variants
-        color_swatches = page.query_selector_all("a[role='radio'][title][href*='/productpage.']")
-        color_set = set()
-        for swatch in color_swatches:
-            color_name = swatch.get_attribute("title")
-            if color_name:
-                color_set.add(color_name)
-        colors = list(color_set)
+        img_el = page.query_selector("div[data-testid='next-image'] img")
+        image  = img_el.get_attribute("src") if img_el else ""
 
+        rows = []
+        for swatch in page.query_selector_all("a[role='radio'][title][href*='/productpage.']"):
+            color_name = swatch.get_attribute("title") or ""
+            href = swatch.get_attribute("href") or ""
+            color_url = href if href.startswith("http") else (BASE_URL + href if href else url)
+            rows.append({"title": title, "price": price, "color": color_name,
+                         "url": color_url, "image": image})
 
-        # 🖼️ Primary image (current swatch)
-        img_elem = page.query_selector("div[data-testid='next-image'] img")
-        image_url = img_elem.get_attribute("src") if img_elem else "MISSING_IMAGE"
+        if not rows:
+            rows.append({"title": title, "price": price, "color": "", "url": url, "image": image})
 
-        print({
-            "title": title,
-            "price": price,
-            "colors": colors,
-            "url": url,
-            "image": image_url
-        })
-
-        return {
-            "title": title,
-            "price": price,
-            "colors": ", ".join(colors),
-            "url": url,
-            "image": image_url
-        }
+        return rows
 
     except Exception as e:
-        print(f"❌ Failed scraping {url}: {e}")
-        return None
+        p(f"  Error: {e}")
+        return []
 
 
 def main():
+    ensure_table(TABLE)
+    p(f"H&M women's scraper -> {TABLE}" + (" [TEST MODE]" if TEST else ""))
+    p("NOTE: running with visible browser (H&M blocks headless via Cloudflare)")
+
     all_products = []
     visited_urls = set()
 
-    with sync_playwright() as p:
-        browser = p.chromium.launch(headless=False)
-        context = browser.new_context()
-        page = context.new_page()
+    with sync_playwright() as pw:
+        # headless=False required — H&M Cloudflare returns 403 for headless browsers
+        browser = pw.chromium.launch(headless=False)
+        ctx = browser.new_context(
+            user_agent=(
+                "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 "
+                "(KHTML, like Gecko) Chrome/125.0.0.0 Safari/537.36"
+            ),
+            locale="en-US",
+            viewport={"width": 1280, "height": 900},
+        )
 
-        # Step 1: Get all category links
-        category_links = get_category_links(page)
+        cat_page = make_page(ctx)
+        category_links = get_category_links(cat_page)
 
-        # Step 2: Visit each category and collect product URLs
-        for cat_url in category_links:
-            print(f"\n🌐 Visiting category: {cat_url}")
-            page.goto(cat_url, timeout=60000)
-            page.wait_for_timeout(2000)
+        if not category_links:
+            p("No categories found — H&M may have updated their nav structure. Exiting.")
+            browser.close()
+            return
 
-            product_urls = scroll_and_collect_product_links(page)
+        cat_limit = 1 if TEST else len(category_links)
+        for cat_url in category_links[:cat_limit]:
+            p(f"\nCategory: {cat_url}")
+            cat_page.goto(cat_url, timeout=60000)
+            cat_page.wait_for_timeout(2000)
+            product_urls = collect_product_links(cat_page)
+            p(f"  {len(product_urls)} products found")
 
-            for i, pdp_url in enumerate(product_urls):
+            pdp_limit = 3 if TEST else len(product_urls)
+            for i, pdp_url in enumerate(product_urls[:pdp_limit]):
                 if pdp_url in visited_urls:
                     continue
                 visited_urls.add(pdp_url)
 
-                print(f"🛍️ Scraping product {i+1}/{len(product_urls)}: {pdp_url}")
-                detail_page = context.new_page()
-                data = scrape_product_detail(detail_page, pdp_url)
+                detail_page = make_page(ctx)
+                rows = scrape_product(detail_page, pdp_url)
                 detail_page.close()
 
-                if data:
-                    all_products.append(data)
+                if rows:
+                    ins, skip = insert_products(TABLE, rows)
+                    all_products.extend(rows)
+                    p(f"  [{i+1}/{min(pdp_limit, len(product_urls))}] {rows[0]['title']} | "
+                      f"{len(rows)} color(s) | {ins} ins, {skip} skip")
 
+        cat_page.close()
         browser.close()
 
-    # Save to DB
-    ensure_table(TABLE)
-    ins, skip = insert_products(TABLE, all_products)
-    print(f"\nDone! {ins} inserted, {skip} skipped (already in DB).")
+    p(f"\n{'='*60}")
+    p(f"DONE! {len(all_products)} total rows scraped")
+
 
 if __name__ == "__main__":
     main()

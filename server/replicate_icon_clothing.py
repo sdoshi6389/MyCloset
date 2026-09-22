@@ -1,7 +1,7 @@
 """
 Clothing AI pipeline:
-  Step 1 — GPT-4o Vision analysis (rich metadata + emoji_prompt)
-  Step 2 — gpt-image-1 icon generation (transparent background PNG)
+  Step 1 — GPT-4o Vision analysis (rich metadata)
+  Step 2 — gpt-image-1 ghost mannequin PNG (transparent background)
   Step 3 — Write metadata + icon_path to DB
   Step 4 — gpt-image-1 emoji sticker (emoticon_path, optional bonus)
 
@@ -96,9 +96,7 @@ Return the following JSON schema:
 
   "keywords": [string],
 
-  "search_tags": [string],
-
-  "emoji_prompt": string
+  "search_tags": [string]
 }
 
 Field Guidelines:
@@ -135,13 +133,6 @@ Example: ["light_wash_jeans", "white_sneakers", "silver_chain"]
 brand: Extract the brand name from any visible tag, label, logo, or text on the garment. Use back_tag_text to identify it. Return null if no brand is visible.
 
 compatible_styles: e.g. ["streetwear", "minimalist", "casual"]
-
-emoji_prompt: Generate an instruction for an image-EDITING model that will be given THIS EXACT PHOTO as input (not a blank canvas). The instruction must tell the model to:
-(1) keep the actual garment exactly as shown — same color, pattern, print, logo, and fabric texture, with zero invented details,
-(2) completely remove everything else from the frame: the person wearing it, any mannequin, hangers, background, and shadows,
-(3) make the background fully transparent,
-(4) re-pose the garment into a flat, symmetrical, front-facing product-catalog presentation — as if laid flat or worn by an invisible ghost mannequin facing the camera straight-on — regardless of the angle, fold, twist, or wrinkle state it's photographed in.
-Example: "Using this exact photo, isolate only the navy blue oversized hoodie. Keep its exact color, print, and fabric texture unchanged. Remove the person, background, and all shadows. Make the background fully transparent. Re-pose the hoodie into a flat, front-facing, symmetrical product-catalog layout, as if laid flat or worn by an invisible mannequin facing forward, with sleeves and body straightened and uncreased."
 
 Return ONLY raw JSON.\
 """
@@ -407,20 +398,17 @@ def generate_icon_from_image(image_path, user_id, filename, tag_text=None, outpu
       3. DB write       → metadata + icon_path saved
       4. gpt-image-1   → emoji sticker (emoticon_path, optional)
     """
-    gpt_tags     = {}
-    caption      = ""
-    category     = None
-    emoji_prompt = None
+    gpt_tags = {}
+    caption  = ""
+    category = None
 
     # ── Step 1: GPT-4o Vision ────────────────────────────────────────────────
     try:
-        gpt_tags     = analyze_image_with_gpt(image_path, tag_text=tag_text)
-        caption      = gpt_tags.get("caption", "") or ""
-        emoji_prompt = gpt_tags.get("emoji_prompt")
-        category     = infer_category(gpt_tags.get("type"))
+        gpt_tags = analyze_image_with_gpt(image_path, tag_text=tag_text)
+        caption  = gpt_tags.get("caption", "") or ""
+        category = infer_category(gpt_tags.get("type"))
         print(f"✅ GPT: caption='{caption}' | type={gpt_tags.get('type')} → category={category}")
         print(f"🏷️  brand='{gpt_tags.get('brand')}' | back_tag='{gpt_tags.get('back_tag_text')}'")
-        print(f"🎨 emoji_prompt='{(emoji_prompt or '')[:80]}'")
     except Exception as e:
         print(f"⚠️  GPT analysis failed ({type(e).__name__}): {e}")
 
@@ -437,12 +425,17 @@ def generate_icon_from_image(image_path, user_id, filename, tag_text=None, outpu
     if not caption:
         caption = filename.rsplit(".", 1)[0].replace("_", " ").replace("-", " ").strip() or "clothing item"
 
-    icon_prompt = emoji_prompt or (
-        f"Using this exact photo, isolate only the {caption}. Keep its exact color, pattern, "
-        "and fabric texture unchanged — do not invent new details. Remove the person, "
-        "background, and all shadows, and make the background fully transparent. Re-pose the "
-        "item into a flat, front-facing, symmetrical product-catalog layout, as if laid flat "
-        "or worn by an invisible mannequin facing forward, uncreased and straightened."
+    icon_prompt = (
+        f"Edit this exact photo into a professional ghost mannequin product image of the {caption}. "
+        "Preserve its exact color, fabric texture, pattern, and any print or logo exactly as photographed "
+        "— do not redraw, illustrate, or stylize; this must remain a photographic edit. "
+        "Remove the background, person, hanger, and all shadows, replacing them with full transparency. "
+        "Give the garment realistic ghost mannequin form: collar/neckline open and shaped as if around "
+        "a neck, shoulders filled to natural body width, torso with genuine 3D body volume and curvature, "
+        "sleeves hanging naturally at the sides. Correct any angle so the garment faces the camera "
+        "straight-on from the front. "
+        "The result should look like a high-end fashion e-commerce product photo on an invisible ghost "
+        "mannequin — photographic realism, not illustration."
     )
 
     # ── Step 2: GPT icon generation (transparent background) ────────────────
@@ -460,9 +453,9 @@ def generate_icon_from_image(image_path, user_id, filename, tag_text=None, outpu
     if icon_path:
         # Push the icon to Supabase Storage (deployed app serves it via /icons redirect)
         try:
-            from storage_utils import upload_file
+            from storage_utils import upload_icon
             _icon_key = icon_path.replace("\\", "/").split("/")[-1]
-            upload_file(icon_path, f"icons/{_icon_key}", webp=True)  # WebP: ~5x smaller, same look
+            upload_icon(icon_path, _icon_key)  # full-res WebP + 320px thumb
         except Exception as e:
             print(f"Storage upload failed for icon {icon_path}: {e}")
         try:

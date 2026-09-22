@@ -119,6 +119,9 @@ def _start_faiss_worker():
 
 _start_faiss_worker()
 
+from warmup import kick_on_boot_if_enabled
+kick_on_boot_if_enabled()
+
 
 # ── Admin endpoints ───────────────────────────────────────────────────────────
 from flask import jsonify as _jsonify, request as _request

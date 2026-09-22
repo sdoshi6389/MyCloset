@@ -15,8 +15,22 @@ def create_outfit(user_id, name, occasion=None, tags=None, notes=None, is_privat
     return result.data[0]["id"]
 
 
+def update_outfit(outfit_id, user_id, name, occasion=None, tags=None, notes=None, is_private=False) -> bool:
+    """Update metadata on an outfit the user owns. Returns False if not found / not theirs."""
+    from datetime import datetime, timezone
+    result = get_supa().table("outfits").update({
+        "name":       name,
+        "occasion":   occasion,
+        "tags":       tags,
+        "notes":      notes,
+        "is_private": bool(is_private),
+        "updated_at": datetime.now(timezone.utc).isoformat(),
+    }).eq("id", outfit_id).eq("user_id", user_id).execute()
+    return len(result.data) > 0
+
+
 def save_outfit_items(outfit_id, items):
-    """items: list of dicts with keys: slot, closet_item_id, catalog_data, nudge_x, nudge_y"""
+    """items: list of dicts with keys: slot, closet_item_id, catalog_data, nudge_x, nudge_y, scale"""
     supa = get_supa()
     supa.table("outfit_items").delete().eq("outfit_id", outfit_id).execute()
 
@@ -28,6 +42,7 @@ def save_outfit_items(outfit_id, items):
             "catalog_data":   it.get("catalog_data"),
             "nudge_x":        int(it.get("nudge_x") or 0),
             "nudge_y":        int(it.get("nudge_y") or 0),
+            "scale":          float(it.get("scale") or 1.0),
         }
         for it in items
         if it.get("closet_item_id") or it.get("catalog_data")
@@ -41,7 +56,7 @@ def _fetch_outfit_items(supa, outfit_ids: list) -> dict:
     if not outfit_ids:
         return {}
     oi_res = supa.table("outfit_items").select(
-        "outfit_id, slot, closet_item_id, catalog_data, nudge_x, nudge_y, "
+        "outfit_id, slot, closet_item_id, catalog_data, nudge_x, nudge_y, scale, "
         "closet_items(id, filename, brand, icon_path, category, user_id)"
     ).in_("outfit_id", outfit_ids).execute()
 
@@ -54,6 +69,7 @@ def _fetch_outfit_items(supa, outfit_ids: list) -> dict:
             "catalog_data":   r.get("catalog_data"),
             "nudge_x":        r.get("nudge_x") or 0,
             "nudge_y":        r.get("nudge_y") or 0,
+            "scale":          r.get("scale") or 1.0,
             "filename":       ci.get("filename"),
             "brand":          ci.get("brand"),
             "icon_path":      ci.get("icon_path"),

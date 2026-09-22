@@ -38,15 +38,70 @@ def public_url(dest_path: str) -> str:
     return f"{_SUPABASE_URL}/storage/v1/object/public/{BUCKET}/{dest_path.lstrip('/')}"
 
 
-def _to_webp(local_path: str, quality: int = 90) -> bytes:
-    """Re-encode an image to WebP at full resolution (visually lossless at q90)."""
+# Grid tiles, the builder rail and recommendation cards all display icons at
+# 60–180 CSS px, so a 320 px thumb covers 2x DPR while being ~10x smaller than
+# the 1024 px full icon. Canvas zones and the detail modal keep the full icon.
+THUMB_PX = 320
+
+
+def thumb_key(icon_name: str) -> str:
+    return f"icons/thumb/{icon_name}"
+
+
+def thumb_url(icon_name: str) -> str:
+    return public_url(thumb_key(icon_name))
+
+
+def _open_image(src):
+    """src: local path or raw bytes → PIL image in RGB/RGBA."""
     from PIL import Image
-    img = Image.open(local_path)
+    img = Image.open(io.BytesIO(src) if isinstance(src, (bytes, bytearray)) else src)
     if img.mode not in ("RGB", "RGBA"):
         img = img.convert("RGBA")  # preserve transparency for icons
+    return img
+
+
+def _encode_webp(img, quality: int) -> bytes:
     buf = io.BytesIO()
     img.save(buf, format="WEBP", quality=quality, method=6)
     return buf.getvalue()
+
+
+def _to_webp(local_path: str, quality: int = 90) -> bytes:
+    """Re-encode an image to WebP at full resolution (visually lossless at q90)."""
+    return _encode_webp(_open_image(local_path), quality)
+
+
+def _to_thumb_webp(src, px: int = THUMB_PX, quality: int = 85) -> bytes:
+    from PIL import Image
+    img = _open_image(src)
+    img.thumbnail((px, px), Image.LANCZOS)
+    return _encode_webp(img, quality)
+
+
+def _put(dest_path: str, data: bytes, content_type: str):
+    get_supa().storage.from_(BUCKET).upload(
+        dest_path, data,
+        {"content-type": content_type, "cache-control": _CACHE_SECONDS, "upsert": "true"},
+    )
+
+
+def upload_thumb(src, icon_name: str) -> str | None:
+    """Generate + upload the THUMB_PX WebP for an icon. src: local path or bytes."""
+    ensure_bucket()
+    try:
+        _put(thumb_key(icon_name), _to_thumb_webp(src), "image/webp")
+        return thumb_url(icon_name)
+    except Exception as e:
+        print(f"⚠️  Storage thumb upload failed for {icon_name}: {e}")
+        return None
+
+
+def upload_icon(local_path: str, icon_name: str, quality: int = 90) -> tuple[str | None, str | None]:
+    """Upload a generated icon as full-res WebP plus its thumb. Returns (icon_url, thumb_url)."""
+    full = upload_file(local_path, f"icons/{icon_name}", webp=True, quality=quality)
+    thumb = upload_thumb(local_path, icon_name)
+    return full, thumb
 
 
 def upload_file(local_path: str, dest_path: str, content_type: str | None = None,

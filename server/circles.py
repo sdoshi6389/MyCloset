@@ -154,19 +154,24 @@ def combined_outfits(circle_id):
     all_items_res = {}
     if outfit_ids:
         oi_res = supa.table("outfit_items").select(
-            "outfit_id, slot, closet_item_id, closet_items(id, filename, brand, icon_path, category, user_id)"
+            "outfit_id, slot, closet_item_id, catalog_data, nudge_x, nudge_y, scale, "
+            "closet_items(id, filename, brand, icon_path, category, user_id)"
         ).in_("outfit_id", outfit_ids).execute()
         for r in oi_res.data:
             oid = r["outfit_id"]
             ci = r.get("closet_items") or {}
             all_items_res.setdefault(oid, []).append({
-                "slot": r["slot"],
+                "slot":           r["slot"],
                 "closet_item_id": r["closet_item_id"],
-                "filename": ci.get("filename"),
-                "brand": ci.get("brand"),
-                "icon_path": ci.get("icon_path"),
-                "category": ci.get("category"),
-                "url": f"/static/{ci.get('user_id')}/{ci.get('filename')}",
+                "catalog_data":   r.get("catalog_data"),
+                "nudge_x":        r.get("nudge_x") or 0,
+                "nudge_y":        r.get("nudge_y") or 0,
+                "scale":          r.get("scale") or 1.0,
+                "filename":       ci.get("filename"),
+                "brand":          ci.get("brand"),
+                "icon_path":      ci.get("icon_path"),
+                "category":       ci.get("category"),
+                "url":            f"/static/{ci.get('user_id')}/{ci.get('filename')}",
             })
 
     outfits = []
@@ -215,21 +220,20 @@ def circle_feed(circle_id):
         users_res = supa.table("users").select("id, email").in_("id", author_ids).execute()
         users_map = {u["id"]: u["email"] for u in users_res.data}
 
+    from services.feed_service import fetch_post_extras
+    images_by_post, likes_by_post = fetch_post_extras(supa, [p["id"] for p in posts_res.data])
+
     posts = []
     for post in posts_res.data:
         post_id = post["id"]
-
-        images_res = supa.table("post_images").select("image_path").eq("post_id", post_id).order("id").execute()
         images = [
-            {"url": f"/feed/images/{r['image_path'].replace(chr(92), '/').split('/')[-1]}"}
-            for r in images_res.data
+            {"url": path if (path or "").startswith("http")
+                    else f"/feed/images/{path.replace(chr(92), '/').split('/')[-1]}"}
+            for path in images_by_post.get(post_id, [])
         ]
-
-        likes_res = supa.table("post_likes").select("user_id", count="exact").eq("post_id", post_id).execute()
-        like_count = likes_res.count or 0
-
-        liked_res = supa.table("post_likes").select("user_id").eq("post_id", post_id).eq("user_id", user_id).execute()
-        liked = len(liked_res.data) > 0
+        likers = likes_by_post.get(post_id, set())
+        like_count = len(likers)
+        liked = user_id in likers
 
         author_email = users_map.get(post["user_id"], "")
         posts.append({

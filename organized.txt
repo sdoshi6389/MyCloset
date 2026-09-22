@@ -1,0 +1,71 @@
+================================================================================
+TOP LEVEL (My Closet/)
+================================================================================
+
+ITEM                                  SIZE        WHAT IT IS                                                    VERDICT
+-------------------------------------- ----------- ------------------------------------------------------------- ------------------------------------
+closet-app/                           73M         Frontend: Vite+React app (default boilerplate README,        Keep src/public/configs.
+                                                   never customized). node_modules/(71M)+dist/(345K) inside     Gitignore node_modules/, dist/
+                                                   are regenerable build artifacts.
+server/                               1.8G        The actual Python/Flask backend.                              Mixed -- see SERVER table below
+completed_scrapers/                   6.9M        The 76 working brand scrapers + db_insert.py (just cleaned).  Keep the .py scrapers; junk inside
+                                                   Had leftover junk inside: __pycache__/, debug screenshots     already deleted
+                                                   (rl_debug.png, shein_debug.png, toryburch_debug.png),
+                                                   session-cookie dumps (rl_cookies.json, shein_cookies.json),
+                                                   3 stray CSVs duplicating the CSV folder below
+completed_csv_files_from_scrapers/    10M,        Raw CSV exports from scraper runs                              Data dump, not code -- excluded
+                                       22 files                                                                   from git
+databases/                            44K         db_manager.py (real code) + bugs.db/progress.db (personal     Kept db_manager.py; deleted the
+                                                   sqlite tracking data) + notes                                  .db files (per your confirmation)
+GroundingDINO/                        26M         A full clone of the third-party open-source GroundingDINO     Not your code -- kept on disk,
+                                                   library (has its own nested .git/)                             gitignored
+myenv/                                6.8G        Python virtualenv                                              Never commit -- gitignored
+downloaded_images/                    185M,       Closet-pipeline input photos (read by                          Kept on disk, gitignored (live
+                                       63 files    get_descriptions_of_closet_images.py, get_brand_from_image.py, pipeline data, not throwaway)
+                                                   generate_clip_embeddings_for_closet.py, etc.)
+converted_images/                     165M,       Same photos, converted to jpg                                  Kept on disk, gitignored
+                                       63 files
+boohooman.csv (root)                  --          Loose scraper output, superseded duplicate of                  Deleted
+                                                   completed_scrapers/boohooman.csv
+brainstorm.txt, brandstoscrape.txt    --          Your planning notes                                            Kept, committed
+import_*.py, migrate_local_to_       --          Real one-off Supabase migration scripts (had hardcoded         Kept; secrets moved to .env
+supabase.py                                       secrets -- fixed)
+supabase_*.sql                        --          DB schema definitions                                         Kept, committed
+.claude/, __pycache__/                --          Tooling/bytecode cache                                        Gitignored
+
+================================================================================
+SERVER/ BREAKDOWN (1.8G)
+================================================================================
+
+ITEM                                       SIZE              WHAT IT IS                                              VERDICT
+------------------------------------------ ----------------- ------------------------------------------------------- ------------------------------------
+auth.py, builder.py, db.py, feed.py,       --                Actual backend app logic                                Kept, committed
+friends.py, circles.py, closet.py,
+outfits.py, outfit_2d.py, main.py, etc.
+aritzia.py, handm_men.py,                  --                A few more scrapers that ended up here instead of      Kept, committed (maybe move later)
+urban_outfitters_women.py, zara_women.py                     completed_scrapers/
+services/, utils/, migrations/             --                Real code dirs                                          Kept code; gitignored their
+                                                                                                                       __pycache__/
+config.py                                  --                Loads secrets via dotenv, but had real secret values    Fixed -- fallback defaults removed,
+                                                                as hardcoded fallback defaults                        now env-only
+credentials.json                           404B              Google OAuth client secret                              NEVER COMMIT -- gitignored
+token.pickle                               1KB               A serialized OAuth token                                NEVER COMMIT -- gitignored
+.env                                       775B              Live OpenAI key, Replicate token, DB password,          NEVER COMMIT -- gitignored
+                                                               JWT secret
+groundingdino_swint_ogc.pth                694M              GroundingDINO model weights                             Excluded -- GitHub rejects >100MB
+                                                                                                                       anyway
+yolov8n.pt                                 6.5M              Standard pretrained YOLOv8 weights                      Excluded -- downloadable, regenerable
+back_tag_detector/                         96M               Includes RealESRGAN_x4plus.pth weights + Roboflow       Excluded model weights; runs/
+                                                               dataset readme + runs/ (training visualization        excluded too; train/images+labels
+                                                               images, regenerable)                                  kept (small dataset, 3.8M)
+faiss_cache/                               638M              Generated vector index/embeddings                       Excluded -- regenerable
+uploaded_closets/                          298M              Real user-uploaded content (live, written by           Kept on disk, gitignored (live data)
+                                                               closet.py's /upload_closet_images route)
+processed/, emoji_outputs/,                42M+39M+35M+      Generated pipeline outputs                              Excluded -- all regenerable
+icon_outputs/, generated_outfits/,         2M+1M+104K
+mannequin_outputs/, cropped_clothing/,
+runs/, post_images/
+test_images/, static/                      864K, 728K        Actual fixtures/assets the app needs                    Kept, committed (small)
+planning.txt, updates.txt,                 --                Dev notes                                               Kept, committed
+libraries_to_install.txt
+__pycache__/                               --                Bytecode cache                                          Deleted + gitignored

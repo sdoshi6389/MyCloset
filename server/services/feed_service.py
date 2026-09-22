@@ -19,8 +19,9 @@ def create_post(user_id, caption, visibility="friends", outfit_id=None, circle_i
 
 
 def attach_image_to_post(post_id, image_path):
+    """Store image. image_path may be a local path or a Supabase CDN URL."""
     get_supa().table("post_images").insert({
-        "post_id": post_id,
+        "post_id":    post_id,
         "image_path": image_path,
     }).execute()
 
@@ -76,19 +77,12 @@ def get_feed(user_id, limit=30, offset=0):
         users_res = supa.table("users").select("id, email").in_("id", author_ids).execute().data
         users_map = {u["id"]: u["email"] for u in users_res}
 
+    images_by_post, likes_by_post = fetch_post_extras(supa, [p["id"] for p in page])
+
     posts = []
     for p in page:
         post_id = p["id"]
-
-        images_res = supa.table("post_images").select("image_path").eq("post_id", post_id).order("id").execute().data
-        images = [r["image_path"] for r in images_res]
-
-        likes_res = supa.table("post_likes").select("user_id", count="exact").eq("post_id", post_id).execute()
-        like_count = likes_res.count or 0
-
-        liked_res = supa.table("post_likes").select("user_id").eq("post_id", post_id).eq("user_id", user_id).execute().data
-        liked = len(liked_res) > 0
-
+        likers = likes_by_post.get(post_id, set())
         posts.append({
             "id":         post_id,
             "user_id":    p["user_id"],
@@ -98,12 +92,31 @@ def get_feed(user_id, limit=30, offset=0):
             "outfit_id":  p["outfit_id"],
             "circle_id":  p["circle_id"],
             "created_at": p["created_at"],
-            "images":     images,
-            "like_count": like_count,
-            "liked":      liked,
+            "images":     images_by_post.get(post_id, []),
+            "like_count": len(likers),
+            "liked":      user_id in likers,
         })
 
     return posts
+
+
+def fetch_post_extras(supa, post_ids: list) -> tuple[dict, dict]:
+    """Two queries for a whole page instead of three per post.
+    Returns ({post_id: [image_path, ...]}, {post_id: {liker_user_id, ...}})."""
+    images_by_post: dict = {}
+    likes_by_post: dict = {}
+    if not post_ids:
+        return images_by_post, likes_by_post
+
+    imgs = supa.table("post_images").select("post_id, image_path").in_("post_id", post_ids).order("id").execute().data or []
+    for r in imgs:
+        images_by_post.setdefault(r["post_id"], []).append(r["image_path"])
+
+    likes = supa.table("post_likes").select("post_id, user_id").in_("post_id", post_ids).execute().data or []
+    for r in likes:
+        likes_by_post.setdefault(r["post_id"], set()).add(r["user_id"])
+
+    return images_by_post, likes_by_post
 
 
 def toggle_like(post_id, user_id):

@@ -1,8 +1,12 @@
 # Secrets
 .env
 **/.env
+**/.env.bak*
 server/credentials.json
 server/token.pickle
+# Deployment env var dumps — these hold live keys, never commit them
+valuesforrailway.txt
+*values*railway*.txt
 
 # Python
 __pycache__/
@@ -25,6 +29,7 @@ server/icon_outputs/
 server/generated_outfits/
 server/mannequin_outputs/
 server/cropped_clothing/
+server/catalog_extracted/
 server/runs/
 server/post_images/
 server/back_tag_detector/runs/
@@ -45,3 +50,5 @@ completed_scrapers/*_cookies.json
 
 # Local tooling
 .claude/
+*.stackdump
+jcrew_products_dump.json

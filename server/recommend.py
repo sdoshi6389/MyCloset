@@ -35,12 +35,14 @@ def recommend():
     if not user_id:
         return jsonify({"message": "Unauthorized"}), 401
 
-    data       = request.get_json(silent=True) or {}
-    outfit     = data.get("outfit") or {}
-    fill_slots = data.get("fill_slots")         # None = infer from empty slots
-    mode       = data.get("mode", "closet")     # "closet" | "catalog"
-    top_k      = min(int(data.get("top_k", 5)), 10)
-    gender     = data.get("gender") or None     # "male" | "female" | None
+    data        = request.get_json(silent=True) or {}
+    outfit      = data.get("outfit") or {}
+    fill_slots  = data.get("fill_slots")          # None = infer from empty slots
+    mode        = data.get("mode", "closet")      # "closet" | "catalog"
+    top_k       = min(int(data.get("top_k", 5)), 10)
+    gender      = data.get("gender") or None      # "male" | "female" | None
+    outfit_name = (data.get("outfit_name") or "").strip() or None
+    occasion    = (data.get("occasion") or "").strip() or None
 
     if mode not in ("closet", "catalog"):
         return jsonify({"message": "mode must be 'closet' or 'catalog'"}), 400
@@ -56,6 +58,8 @@ def recommend():
             mode=mode,
             top_k=top_k,
             gender=gender,
+            outfit_name=outfit_name,
+            occasion=occasion,
         )
         return jsonify(result), 200
     except Exception as e:
@@ -236,6 +240,9 @@ def log_event():
             "recommendation_clicked":  "was_clicked",
             "outfit_saved":            "was_saved",
             "recommendation_disliked": "was_rejected",
+            # The builder's Skip button already sends a "reject" feedback signal,
+            # so a skip is a rejection for analytics too.
+            "recommendation_skipped":  "was_rejected",
         }
         flag = flag_map.get(event)
         if flag:

@@ -51,7 +51,17 @@ def create():
             fname = secure_filename(f.filename)
             dest = os.path.join(POST_IMAGES_DIR, f"{post_id}_{fname}")
             f.save(dest)
-            attach_image_to_post(post_id, dest)
+            # Try to upload to Supabase Storage so images survive Railway redeploys.
+            # Fall back to serving locally if Storage is unavailable.
+            stored_path = dest
+            try:
+                from storage_utils import upload_file
+                cdn_url = upload_file(dest, f"post_images/{post_id}_{fname}")
+                if cdn_url:
+                    stored_path = cdn_url
+            except Exception as _e:
+                pass
+            attach_image_to_post(post_id, stored_path)
 
     return jsonify({"id": post_id, "message": "Post created"}), 201
 

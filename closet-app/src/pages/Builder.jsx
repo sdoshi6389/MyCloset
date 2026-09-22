@@ -1,10 +1,10 @@
-import React, { useEffect, useState, useCallback, useRef } from "react";
+import React, { useEffect, useState, useCallback, useMemo, useRef } from "react";
 import axios from "axios";
 import Layout from "./Layout";
 import { useCircle } from "../context/CircleContext";
 import "./Builder.css";
 
-import { API_BASE, iconSrc } from "../config";
+import { API_BASE, iconSrc, thumbSrc, fallbackToIcon } from "../config";
 
 // ── Zone definitions ──────────────────────────────────────────────────────────
 // Bracelet zones are intentionally excluded from ZONES — they live in
@@ -133,7 +133,6 @@ const SLOT_PICKER = [
   { id: "shorts",        label: "Shorts"    },
   { id: "outer_bottom",  label: "Skirt"     },
   { id: "left_shoe",     label: "Shoes"     },
-  { id: "left_sock",     label: "Socks"     },
   { id: "innerwear",     label: "Innerwear" },
   { id: "underwear",     label: "Underwear" },
 ];
@@ -201,6 +200,9 @@ export default function Builder() {
   const nudgeOffsetMapRef = useRef({});
   const [loadedNudges, setLoadedNudges] = useState({});
   const [nudgeKey, setNudgeKey]         = useState(0);
+  // Scale map: zoneId → float. Written by child components; read on save.
+  const scaleMapRef = useRef({});
+  const [loadedScales, setLoadedScales] = useState({});
 
   const [hovered, setHovered]       = useState(null);
   const [isDragging, setIsDragging] = useState(false);
@@ -218,12 +220,18 @@ export default function Builder() {
   const [recsLoading,   setRecsLoading]   = useState(false);
   const [recCardIndex,  setRecCardIndex]  = useState({});
   const [previews,      setPreviews]      = useState({});
+  // Set when a fetch for activeRecSlot returns nothing, so the band can explain why
+  const [recEmpty,      setRecEmpty]      = useState(null);
+  const [recNonce,      setRecNonce]      = useState(0); // bump to force a refetch
 
   const [devMode, setDevMode]     = useState(false);
   const [saveModal, setSaveModal] = useState(false);
   const [saveName, setSaveName]   = useState("");
   const [isPrivate, setIsPrivate] = useState(false);
   const [saving, setSaving]       = useState(false);
+  // Id of the saved look currently on the canvas — Save updates it instead of duplicating
+  const [loadedOutfitId, setLoadedOutfitId] = useState(null);
+  const [saveAsNew, setSaveAsNew] = useState(false);
 
   const pageRef    = useRef(null);
   const recFetchRef = useRef(null);
@@ -281,16 +289,19 @@ export default function Builder() {
   }, [outfit, activeRecSlot]);
 
   useEffect(() => {
-    if (!recommenderOn || !activeRecSlot) { setRecs({}); setPreviews({}); return; }
-    if (!Object.values(outfit).some(Boolean)) { setRecs({}); setPreviews({}); return; }
+    if (!recommenderOn || !activeRecSlot) { setRecs({}); setPreviews({}); setRecEmpty(null); return; }
+    if (!Object.values(outfit).some(Boolean)) { setRecs({}); setPreviews({}); setRecEmpty(null); return; }
     const _recZone = REC_SLOT_TO_ZONE[activeRecSlot] || activeRecSlot;
-    if (outfit[_recZone]) { setRecs({}); setPreviews({}); return; }
+    if (outfit[_recZone]) { setRecs({}); setPreviews({}); setRecEmpty(null); return; }
 
     const fillSlots = [activeRecSlot];
 
+    // Short debounce: the request only fires on an explicit slot click, so this
+    // just coalesces rapid toggles (gender / catalog) rather than typing.
     clearTimeout(recFetchRef.current);
     recFetchRef.current = setTimeout(() => {
       setRecsLoading(true);
+      setRecEmpty(null);
       const outfitPayload = {};
       for (const [slot, item] of Object.entries(outfit)) {
         outfitPayload[slot] = item ? {
@@ -298,31 +309,49 @@ export default function Builder() {
           formality_score: item.formality_score, category: item.category, type: item.type,
         } : null;
       }
+      const _ed = computeEditorial(outfit);
       axios.post(`${API_BASE}/recommend`, {
-        outfit: outfitPayload, fill_slots: fillSlots,
-        mode: catalogMode ? "catalog" : "closet", top_k: 5,
-        gender: recGender,
+        outfit:       outfitPayload,
+        fill_slots:   fillSlots,
+        mode:         catalogMode ? "catalog" : "closet",
+        top_k:        5,
+        gender:       recGender,
+        outfit_name:  saveName || _ed?.outfitName || null,
+        occasion:     _ed?.occasions?.[0] || null,
       }, { headers: { ...auth(), "Content-Type": "application/json" } })
         .then((res) => {
           const raw = res.data.recommendations || {};
           const processed = {};
+          let total = 0;
           for (const [slot, candidates] of Object.entries(raw)) {
             // Remap virtual rec slots to their canvas zone so the ghost + previews work
             const zoneKey = REC_SLOT_TO_ZONE[slot] || slot;
             processed[zoneKey] = candidates.map((c) => ({
-              ...c, icon_url: abs(c.icon_url), image_url: abs(c.image_url),
+              ...c, icon_url: abs(c.icon_url), thumb_url: abs(c.thumb_url), image_url: abs(c.image_url),
             }));
+            total += candidates.length;
           }
           setRecs(processed);
           setRecCardIndex({});
           setPreviews({});
+          if (total === 0) {
+            setRecEmpty({
+              slot: activeRecSlot,
+              mode: catalogMode ? "catalog" : "closet",
+              catalogUnavailable: res.data.catalog_status === "unavailable",
+            });
+          }
         })
-        .catch((e) => { console.error("Recommend error:", e); setRecs({}); })
+        .catch((e) => {
+          console.error("Recommend error:", e);
+          setRecs({});
+          setRecEmpty({ slot: activeRecSlot, mode: catalogMode ? "catalog" : "closet", error: true });
+        })
         .finally(() => setRecsLoading(false));
-    }, 800);
+    }, 250);
 
     return () => clearTimeout(recFetchRef.current);
-  }, [recommenderOn, catalogMode, recGender, outfit, activeRecSlot]);
+  }, [recommenderOn, catalogMode, recGender, outfit, activeRecSlot, recNonce]);
 
   // ── Outfit helpers ────────────────────────────────────────────────────────
   const removeSlot  = (id) => setOutfit((p) => ({ ...p, [id]: null }));
@@ -334,8 +363,11 @@ export default function Builder() {
   const resetOutfit = () => {
     setOutfit(Object.fromEntries(ZONES.map((z) => [z.id, null])));
     setBraceletStacks({ left: null, right: null });
+    setLoadedOutfitId(null);
     nudgeOffsetMapRef.current = {};
+    scaleMapRef.current = {};
     setLoadedNudges({});
+    setLoadedScales({});
     setNudgeKey((k) => k + 1);
   };
 
@@ -343,6 +375,18 @@ export default function Builder() {
     + (braceletStacks.left ? 1 : 0) + (braceletStacks.right ? 1 : 0);
 
   const hasRecs = Object.values(recs).some((arr) => arr.length > 0);
+
+  // How many of the user's own items fall in each canvas zone — lets the slot
+  // picker show "Shoes –" instead of offering a slot that can only come back empty.
+  const ownedByZone = useMemo(() => {
+    const counts = {};
+    for (const it of items) {
+      if (it.is_mine === false) continue;
+      const z = inferZone(it);
+      if (z) counts[z] = (counts[z] || 0) + 1;
+    }
+    return counts;
+  }, [items]);
 
   // Drop handler — bracelets go to their arm stack; everything else routes
   // to the inferred zone (or the drop-target zone as fallback).
@@ -409,18 +453,25 @@ export default function Builder() {
 
   // ── Recommendation accept / skip ──────────────────────────────────────────
   const onAcceptRec = useCallback((slotId, rec) => {
+    // recommendation_id rides along on the placed item so a later save can be
+    // credited back to this recommendation (was_saved).
+    const recId = rec.recommendation_id || null;
     if (rec.source === "closet") {
       const fullItem = items.find((i) => i.id === rec.id);
-      setOutfit((prev) => ({ ...prev, [slotId]: fullItem ?? {
-        id: rec.id, title: rec.title, brand: rec.brand,
-        icon_url: rec.icon_url, image_url: rec.image_url,
-        color: rec.color, is_mine: true,
+      setOutfit((prev) => ({ ...prev, [slotId]: {
+        ...(fullItem ?? {
+          id: rec.id, title: rec.title, brand: rec.brand,
+          icon_url: rec.icon_url, thumb_url: rec.thumb_url, image_url: rec.image_url,
+          color: rec.color, is_mine: true,
+        }),
+        recommendation_id: recId,
       }}));
     } else {
       setOutfit((prev) => ({ ...prev, [slotId]: {
         id: null, title: rec.title, brand: rec.brand,
         icon_url: rec.extractedUrl || null,
         image_url: rec.image_url, color: rec.color, price: rec.price, is_mine: false,
+        recommendation_id: recId,
       }}));
     }
     axios.post(`${API_BASE}/recommend/feedback`,
@@ -428,7 +479,8 @@ export default function Builder() {
       { headers: { ...auth(), "Content-Type": "application/json" } }
     ).catch(console.error);
     axios.post(`${API_BASE}/recommend/events`,
-      { event_type: "recommendation_added", item_id: rec.id, context: { slot: slotId, score: rec.score, source: rec.source } },
+      { event_type: "recommendation_added", item_id: rec.id, recommendation_id: recId,
+        context: { slot: slotId, score: rec.score, source: rec.source } },
       { headers: { ...auth(), "Content-Type": "application/json" } }
     ).catch(console.error);
   }, [items]);
@@ -443,7 +495,9 @@ export default function Builder() {
         { headers: { ...auth(), "Content-Type": "application/json" } }
       ).catch(console.error);
       axios.post(`${API_BASE}/recommend/events`,
-        { event_type: "recommendation_skipped", item_id: currentRec.id, context: { slot: slotId, score: currentRec.score, source: currentRec.source } },
+        { event_type: "recommendation_skipped", item_id: currentRec.id,
+          recommendation_id: currentRec.recommendation_id || null,
+          context: { slot: slotId, score: currentRec.score, source: currentRec.source } },
         { headers: { ...auth(), "Content-Type": "application/json" } }
       ).catch(console.error);
     }
@@ -490,11 +544,22 @@ export default function Builder() {
   }, []);
 
   // ── Save flow ─────────────────────────────────────────────────────────────
+  const loadedOutfit = loadedOutfitId != null
+    ? savedOutfits.find((o) => o.id === loadedOutfitId) || null
+    : null;
+  const updateExisting = !!loadedOutfit && loadedOutfit.is_mine !== false && !saveAsNew;
+
   const openSave = () => {
     if (!filledCount) return;
-    const d = new Date();
-    setSaveName(`Look — ${d.toLocaleDateString("en-US", { month: "short", day: "numeric" })}`);
-    setIsPrivate(false);
+    setSaveAsNew(false);
+    if (loadedOutfit) {
+      setSaveName(loadedOutfit.name || "");
+      setIsPrivate(!!loadedOutfit.is_private);
+    } else {
+      const d = new Date();
+      setSaveName(`Look — ${d.toLocaleDateString("en-US", { month: "short", day: "numeric" })}`);
+      setIsPrivate(false);
+    }
     setSaveModal(true);
   };
 
@@ -505,6 +570,7 @@ export default function Builder() {
     for (const [slot, item] of Object.entries(outfit)) {
       if (!item) continue;
       const nudge = nudgeOffsetMapRef.current[slot] || { x: 0, y: 0 };
+      const scale = scaleMapRef.current[slot] ?? 1.0;
       outfitItems.push({
         slot,
         closet_item_id: item.id || null,
@@ -518,12 +584,14 @@ export default function Builder() {
         } : null,
         nudge_x: Math.round(nudge.x),
         nudge_y: Math.round(nudge.y),
+        scale,
       });
     }
     for (const [side, slotKey] of [["left", "bracelet_left"], ["right", "bracelet_right"]]) {
       const item = braceletStacks[side];
       if (!item) continue;
       const nudge = nudgeOffsetMapRef.current[slotKey] || { x: 0, y: 0 };
+      const scale = scaleMapRef.current[slotKey] ?? 1.0;
       outfitItems.push({
         slot:           slotKey,
         closet_item_id: item.id || null,
@@ -535,17 +603,37 @@ export default function Builder() {
         } : null,
         nudge_x: Math.round(nudge.x),
         nudge_y: Math.round(nudge.y),
+        scale,
       });
     }
 
     try {
-      await axios.post(
-        `${API_BASE}/outfits`,
-        { name: saveName.trim() || "My Look", is_private: isPrivate, items: outfitItems },
-        { headers: { ...auth(), "Content-Type": "application/json" } }
-      );
+      const _savedEd = computeEditorial(outfit);
+      const body = {
+        name:       saveName.trim() || "My Look",
+        is_private: isPrivate,
+        items:      outfitItems,
+        occasion:   _savedEd?.occasions?.[0] || null,
+      };
+      const headers = { headers: { ...auth(), "Content-Type": "application/json" } };
+      const res = updateExisting
+        ? await axios.put(`${API_BASE}/outfits/${loadedOutfitId}`, body, headers)
+        : await axios.post(`${API_BASE}/outfits`, body, headers);
+      const savedId = res.data?.id ?? loadedOutfitId;
+      setLoadedOutfitId(savedId);
       setSaveModal(false);
       fetchSaved();
+
+      // Credit any recommendation that ended up in a saved look (→ was_saved)
+      const placed = [...Object.values(outfit), braceletStacks.left, braceletStacks.right];
+      for (const it of placed) {
+        if (!it?.recommendation_id) continue;
+        axios.post(`${API_BASE}/recommend/events`,
+          { event_type: "outfit_saved", item_id: it.id, outfit_id: savedId,
+            recommendation_id: it.recommendation_id },
+          headers
+        ).catch(console.error);
+      }
     } catch (err) {
       alert(err?.response?.data?.message || "Failed to save.");
     } finally {
@@ -566,6 +654,7 @@ export default function Builder() {
     let leftBracelet  = null;
     let rightBracelet = null;
     const restoredNudges = {};
+    const restoredScales = {};
 
     for (const it of saved.items) {
       let item;
@@ -599,6 +688,9 @@ export default function Builder() {
       if (it.nudge_x || it.nudge_y) {
         restoredNudges[it.slot] = { x: it.nudge_x || 0, y: it.nudge_y || 0 };
       }
+      if (it.scale && it.scale !== 1.0) {
+        restoredScales[it.slot] = it.scale;
+      }
 
       if (it.slot === "bracelet_left" || it.slot.startsWith("bracelet_left_")) {
         if (!leftBracelet) leftBracelet = item;
@@ -614,8 +706,11 @@ export default function Builder() {
 
     setOutfit(next);
     setBraceletStacks({ left: leftBracelet, right: rightBracelet });
+    setLoadedOutfitId(saved.id ?? null);
     nudgeOffsetMapRef.current = { ...restoredNudges };
+    scaleMapRef.current = { ...restoredScales };
     setLoadedNudges(restoredNudges);
+    setLoadedScales(restoredScales);
     setNudgeKey((k) => k + 1);
   };
 
@@ -623,7 +718,10 @@ export default function Builder() {
   const onEnter = (e, item) => {
     if (!item || isDragging) return;
     const r = e.currentTarget.getBoundingClientRect();
-    setHovered({ url: item.image_url, x: r.right + 12, y: r.top });
+    const CARD_W = 200;
+    const spaceRight = window.innerWidth - r.right;
+    const x = spaceRight >= CARD_W + 16 ? r.right + 12 : r.left - CARD_W - 12;
+    setHovered({ url: item.image_url, x: Math.max(4, x), y: r.top });
   };
   const onLeave = () => setHovered(null);
 
@@ -730,15 +828,31 @@ export default function Builder() {
             <div className="pb-slot-sidebar">
               <div className="pb-slot-sidebar-label">Suggest for…</div>
               <div className="pb-slot-list">
-                {SLOT_PICKER.filter((s) => !outfit[REC_SLOT_TO_ZONE[s.id] || s.id]).map((s) => (
-                  <button
-                    key={s.id}
-                    className={`pb-slot-btn${activeRecSlot === s.id ? " pb-slot-btn--active" : ""}`}
-                    onClick={() => onSelectSlot(s.id)}
-                  >
-                    {s.label}
-                  </button>
-                ))}
+                {(() => {
+                  const seenZones = new Set();
+                  return SLOT_PICKER.filter((s) => {
+                    const zone = REC_SLOT_TO_ZONE[s.id] || s.id;
+                    if (outfit[zone]) return false;
+                    if (seenZones.has(zone)) return false;
+                    seenZones.add(zone);
+                    return true;
+                  });
+                })().map((s) => {
+                  const zone  = REC_SLOT_TO_ZONE[s.id] || s.id;
+                  const owned = ownedByZone[zone] || 0;
+                  const none  = !catalogMode && owned === 0;
+                  return (
+                    <button
+                      key={s.id}
+                      className={`pb-slot-btn${activeRecSlot === s.id ? " pb-slot-btn--active" : ""}${none ? " pb-slot-btn--none" : ""}`}
+                      onClick={() => onSelectSlot(s.id)}
+                      title={none ? `You have no ${s.label.toLowerCase()} in your closet — switch to Catalog to shop` : undefined}
+                    >
+                      {s.label}
+                      {!catalogMode && <span className="pb-slot-count">{owned || "–"}</span>}
+                    </button>
+                  );
+                })}
               </div>
             </div>
           )}
@@ -771,7 +885,9 @@ export default function Builder() {
               removeBracelet={removeBracelet}
               nudgeKey={nudgeKey}
               loadedNudges={loadedNudges}
+              loadedScales={loadedScales}
               onNudgeChange={(zoneId, off) => { nudgeOffsetMapRef.current[zoneId] = off; }}
+              onScaleChange={(zoneId, s) => { scaleMapRef.current[zoneId] = s; }}
             />
             <button
               className={`pb-flip-btn${flipped ? " pb-flip-btn--back" : ""}`}
@@ -828,6 +944,38 @@ export default function Builder() {
           </aside>
         </div>
 
+        {/* ── Empty state: explain why nothing came back instead of showing nothing ── */}
+        {recommenderOn && !hasRecs && !recsLoading && recEmpty && recEmpty.slot === activeRecSlot && (() => {
+          const label = (SLOT_PICKER.find((s) => s.id === recEmpty.slot)?.label || "items").toLowerCase();
+          let msg, action = null;
+          if (recEmpty.error) {
+            msg = "Couldn't reach the recommender — check the server and try again.";
+          } else if (recEmpty.mode === "closet") {
+            msg = `No ${label} in your closet match this look yet.`;
+            action = (
+              <button className="pb-rec-empty-action" onClick={() => setCatalogMode(true)}>
+                🛒 Shop {label} in Catalog
+              </button>
+            );
+          } else if (recEmpty.catalogUnavailable) {
+            msg = "The catalog index is still loading — give it a few seconds and click the slot again.";
+            action = (
+              <button className="pb-rec-empty-action" onClick={() => setRecNonce((n) => n + 1)}>↻ Retry</button>
+            );
+          } else {
+            msg = `No ${label} in the catalog fit this look. Try toggling gender or a different slot.`;
+          }
+          return (
+            <div className="pb-rec-band pb-rec-band--empty">
+              <span className="pb-rec-band-label">✦ For You</span>
+              <div className="pb-rec-empty">
+                <span className="pb-rec-empty-msg">{msg}</span>
+                {action}
+              </div>
+            </div>
+          );
+        })()}
+
         {/* ── Recommendations band ── */}
         {recommenderOn && hasRecs && (
           <div className="pb-rec-band">
@@ -855,14 +1003,19 @@ export default function Builder() {
                       const srcUrl = rec.image_url;
                       // Update every catalog item in this slot sharing the same image_url
                       // (dedup means only one fires the request; all should get the result)
-                      setRecs((prev) => ({
-                        ...prev,
-                        [slot]: prev[slot].map((r) =>
-                          r.source === "catalog" && r.image_url === srcUrl
-                            ? { ...r, extractedUrl: url }
-                            : r
-                        ),
-                      }));
+                      // The extraction can resolve after the user switched slot/mode and
+                      // these recs were cleared — then there is nothing to update.
+                      setRecs((prev) => {
+                        if (!prev[slot]) return prev;
+                        return {
+                          ...prev,
+                          [slot]: prev[slot].map((r) =>
+                            r.source === "catalog" && r.image_url === srcUrl
+                              ? { ...r, extractedUrl: url }
+                              : r
+                          ),
+                        };
+                      });
                       setPreviews((prev) => {
                         const p = prev[slot];
                         if (!p || p.source !== "catalog" || p.image_url !== srcUrl) return prev;
@@ -877,8 +1030,10 @@ export default function Builder() {
                         color:     rec.color,
                         category:  rec.category || SLOT_TO_CATEGORY[slot],
                         icon_url:  rec.extractedUrl || rec.icon_url,
+                        thumb_url: rec.thumb_url,
                         image_url: rec.image_url,
                         is_mine:   rec.source === "closet",
+                        recommendation_id: rec.recommendation_id || null,
                       }));
                       setIsDragging(true);
                       setDragZone(slot);
@@ -956,7 +1111,7 @@ export default function Builder() {
       {saveModal && (
         <div className="pb-modal-backdrop" onClick={() => setSaveModal(false)}>
           <div className="pb-save-modal" onClick={(e) => e.stopPropagation()}>
-            <h3 className="pb-modal-title">Preserve this look</h3>
+            <h3 className="pb-modal-title">{updateExisting ? "Update this look" : "Preserve this look"}</h3>
             <input
               className="pb-save-input"
               value={saveName}
@@ -965,6 +1120,16 @@ export default function Builder() {
               autoFocus
               onKeyDown={(e) => e.key === "Enter" && confirmSave()}
             />
+            {loadedOutfit && loadedOutfit.is_mine !== false && (
+              <label className="pb-privacy-row">
+                <input
+                  type="checkbox"
+                  checked={saveAsNew}
+                  onChange={(e) => setSaveAsNew(e.target.checked)}
+                />
+                <span className="pb-privacy-label">Save as a new look instead of updating</span>
+              </label>
+            )}
             <label className="pb-privacy-row">
               <input
                 type="checkbox"
@@ -981,7 +1146,7 @@ export default function Builder() {
             <div className="pb-modal-actions">
               <button className="pb-btn-cancel" onClick={() => setSaveModal(false)}>Cancel</button>
               <button className="pb-btn-confirm" onClick={confirmSave} disabled={saving}>
-                {saving ? "Saving…" : "Save Look"}
+                {saving ? "Saving…" : updateExisting ? "Update Look" : "Save Look"}
               </button>
             </div>
           </div>
@@ -1057,7 +1222,7 @@ function PortraitCanvas({
   previews, onConfirmPreview, onCancelPreview, onGhostDragStart, onGhostDragEnd,
   recommenderOn, activeRecSlot, onSelectSlot,
   braceletStacks, removeBracelet,
-  nudgeKey, loadedNudges, onNudgeChange,
+  nudgeKey, loadedNudges, loadedScales, onNudgeChange, onScaleChange,
 }) {
   const isEmpty    = !Object.values(outfit).some(Boolean)
     && !braceletStacks.left && !braceletStacks.right;
@@ -1096,7 +1261,9 @@ function PortraitCanvas({
     onGhostDragEnd,
     isActiveRec:      activeRecSlot === zone.id || REC_SLOT_TO_ZONE[activeRecSlot] === zone.id,
     initialNudge:     loadedNudges?.[zone.id],
+    initialScale:     loadedScales?.[zone.id] ?? 1.0,
     onNudgeChange:    (off) => onNudgeChange(zone.id, off),
+    onScaleChange:    (s)   => onScaleChange(zone.id, s),
   });
 
   // Whether a bracelet drag is in progress (both sides should highlight)
@@ -1273,7 +1440,7 @@ function BraceletStack({ side, item, computedTop, removeBracelet, isDragging, on
 }
 
 // ── CanvasZone ────────────────────────────────────────────────────────────────
-function CanvasZone({ zone, computedTop, chosen, isDragging, dragZone, altHeld, onDrop, onRemove, onEnter, onLeave, recCandidates, recIdx, onAcceptRec, onSkipRec, preview, onConfirmPreview, onCancelPreview, onGhostDragStart, onGhostDragEnd, isActiveRec, initialNudge, onNudgeChange }) {
+function CanvasZone({ zone, computedTop, chosen, isDragging, dragZone, altHeld, onDrop, onRemove, onEnter, onLeave, recCandidates, recIdx, onAcceptRec, onSkipRec, preview, onConfirmPreview, onCancelPreview, onGhostDragStart, onGhostDragEnd, isActiveRec, initialNudge, initialScale, onNudgeChange, onScaleChange }) {
   const [dragOver,    setDragOver]   = useState(false);
   const [nudgeOffset, setNudgeOffset] = useState(initialNudge || { x: 0, y: 0 });
   const [grabbing,    setGrabbing]   = useState(false);
@@ -1285,10 +1452,15 @@ function CanvasZone({ zone, computedTop, chosen, isDragging, dragZone, altHeld, 
   const resizeDragging   = useRef(false);
   const resizeStart      = useRef(null);
   const justResized      = useRef(false);
-  const [scale, setScale]       = useState(1.0);
+  const [scale, setScale]       = useState(initialScale ?? 1.0);
   const [resizing, setResizing] = useState(false);
   const firstMount       = useRef(true);
+  const onScaleChangeRef = useRef(onScaleChange);
   useEffect(() => { onNudgeChangeRef.current = onNudgeChange; }, [onNudgeChange]);
+  useEffect(() => { onScaleChangeRef.current = onScaleChange; }, [onScaleChange]);
+
+  // Report scale changes to parent map so it can be read on save
+  useEffect(() => { onScaleChangeRef.current?.(scale); }, [scale]);
 
   // Reset nudge and scale when the placed item changes (skip first mount to preserve initialNudge)
   const itemKey = chosen?.id ?? chosen?.image_url ?? preview?.image_url ?? null;
@@ -1473,8 +1645,10 @@ function CanvasZone({ zone, computedTop, chosen, isDragging, dragZone, altHeld, 
               color:     rec.color,
               category:  rec.category || SLOT_TO_CATEGORY[zone.id],
               icon_url:  rec.extractedUrl || rec.icon_url,
+              thumb_url: rec.thumb_url,
               image_url: rec.image_url,
               is_mine:   rec.source === "closet",
+              recommendation_id: rec.recommendation_id || null,
             }));
             onGhostDragStart && onGhostDragStart(zone.id);
           }}
@@ -1605,13 +1779,15 @@ function MiniSavedCard({ outfit, onLoad, onDelete }) {
   const icons = outfit.items
     .filter((it) => it.icon_path)
     .slice(0, 2)
-    .map((it) => iconUrl(it.icon_path));
+    .map((it) => thumbSrc(it.icon_path));
 
   return (
     <div className="pb-mini-card">
       <div className="pb-mini-icons">
         {icons.length > 0 ? (
-          icons.map((url, i) => <img key={i} src={url} alt="" className="pb-mini-icon" />)
+          icons.map((url, i) => (
+            <img key={i} src={url} alt="" className="pb-mini-icon" loading="lazy" onError={fallbackToIcon} />
+          ))
         ) : (
           <span style={{ fontSize: "0.6rem", color: "#3a3a50" }}>—</span>
         )}
@@ -1674,7 +1850,7 @@ function RecRailItem({ rec, slot, onClickPlace, onDragStart, onDragEnd, onExtrac
     const key = `${rawUrl}|${slot}`;
     if (_extracting.has(key)) return;
     _doExtract(0);
-  }, [rec.image_url, rec.source, rec.extractedUrl]);
+  }, [rec.image_url, rec.source, rec.extractedUrl, _doExtract]);
 
   const handleNextStep = useCallback((e) => {
     e.stopPropagation();
@@ -1689,8 +1865,10 @@ function RecRailItem({ rec, slot, onClickPlace, onDragStart, onDragEnd, onExtrac
     _doExtract(0, true);    // force-clear cache, restart from step 0
   }, [onExtracted, _doExtract]);
 
-  const displayUrl = rec.extractedUrl || rec.icon_url || rec.image_url;
+  // 68px card: prefer the 320px thumb over the 1024px icon
+  const displayUrl = rec.extractedUrl || rec.thumb_url || rec.icon_url || rec.image_url;
   const isLoading  = initialExtracting || forceExtracting;
+  const label = rec.title || (rec.brand && rec.brand.toLowerCase() !== "unknown" ? rec.brand : "—");
   // Show ↻ only when: extraction completed (stepOverride known), was freshly extracted (not cache = -1),
   // and Gemini hasn't run yet (step < 2 means PIL=0 or rembg=1 succeeded)
   const canGoNext  = rec.source === "catalog" && stepOverride !== null && stepOverride >= 0 && stepOverride < 2;
@@ -1708,6 +1886,9 @@ function RecRailItem({ rec, slot, onClickPlace, onDragStart, onDragEnd, onExtrac
           src={displayUrl}
           className="pb-rec-rail-img"
           alt=""
+          loading="lazy"
+          decoding="async"
+          onError={fallbackToIcon}
           style={{ opacity: isLoading ? 0.4 : 1, transition: "opacity 0.3s" }}
         />
       ) : (
@@ -1731,7 +1912,7 @@ function RecRailItem({ rec, slot, onClickPlace, onDragStart, onDragEnd, onExtrac
         <span className="pb-rec-price-tag">{rec.price}</span>
       )}
       {rec.source === "catalog" && <span className="pb-rec-catalog-dot" title="Shop item" />}
-      <span className="pb-rec-rail-name">{rec.brand || rec.title || "—"}</span>
+      <span className="pb-rec-rail-name" title={label}>{label}</span>
       {devMode && rec.source === "catalog" && stepOverride !== null && (
         <button
           className="pb-rec-reset-btn"
@@ -1746,7 +1927,7 @@ function RecRailItem({ rec, slot, onClickPlace, onDragStart, onDragEnd, onExtrac
 
 // ── RailItem ──────────────────────────────────────────────────────────────────
 function RailItem({ item, used, compatible, onClickPlace, onDragStart, onDragEnd, onEnter, onLeave }) {
-  const displayUrl = item.icon_url || item.image_url;
+  const displayUrl = item.thumb_url || item.icon_url || item.image_url;
   if (!displayUrl) return null;
 
   const zone      = inferZone(item);
@@ -1773,6 +1954,9 @@ function RailItem({ item, used, compatible, onClickPlace, onDragStart, onDragEnd
         src={displayUrl}
         className="pb-rail-img"
         alt=""
+        loading="lazy"
+        decoding="async"
+        onError={fallbackToIcon}
         style={{ opacity: item.icon_url ? 1 : 0.65 }}
       />
       {zoneLabel && <span className="pb-rail-badge">{zoneLabel}</span>}

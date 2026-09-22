@@ -1,3 +1,5 @@
+import threading
+
 from PIL import Image
 from pillow_heif import register_heif_opener
 
@@ -8,19 +10,30 @@ register_heif_opener()
 # torch + CLIP load on the first embedding call, not at import. This keeps the
 # web app's baseline RAM low (no ~1 GB torch runtime at boot), which also lets
 # the FAISS rebuild run without competing for memory.
+#
+# The load MUST be serialised: the warmup thread and a request thread can reach
+# here at the same moment, and two concurrent from_pretrained() calls leave the
+# model on the meta device ("Cannot copy out of meta tensor"), permanently
+# breaking every later call in the process. Build into locals and publish only
+# once fully constructed, so no thread can observe a half-initialised model.
 _MODEL = None
 _PROCESSOR = None
 _DEVICE = None
+_CLIP_LOCK = threading.Lock()
 
 
 def _get_clip():
     global _MODEL, _PROCESSOR, _DEVICE
     if _MODEL is None:
-        import torch
-        from transformers import CLIPProcessor, CLIPModel
-        _DEVICE = "cuda" if torch.cuda.is_available() else "cpu"
-        _MODEL = CLIPModel.from_pretrained("openai/clip-vit-base-patch32").to(_DEVICE)
-        _PROCESSOR = CLIPProcessor.from_pretrained("openai/clip-vit-base-patch32")
+        with _CLIP_LOCK:
+            if _MODEL is None:
+                import torch
+                from transformers import CLIPProcessor, CLIPModel
+                device = "cuda" if torch.cuda.is_available() else "cpu"
+                model = CLIPModel.from_pretrained("openai/clip-vit-base-patch32").to(device)
+                model.eval()
+                processor = CLIPProcessor.from_pretrained("openai/clip-vit-base-patch32")
+                _DEVICE, _PROCESSOR, _MODEL = device, processor, model
     return _MODEL, _PROCESSOR
 
 

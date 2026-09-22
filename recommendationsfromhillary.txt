@@ -1,0 +1,24 @@
+7/23/26:
+
+suggesitons from hillary: 
+
+- add feature that allows user to collapse the menu on the side 
+- "find match" should be automatic, have a toggle that allows it to be automatic or not (have a hover on what this find match does above the toggle so user can choose to enable it or not)
+- brand detection feature is nice but it should also autofill the size if the tag is included (or if the size is displayed at all)
+- make the icon more representative of the image that is getting fed to the llm (like the piece of clothing in your closet), basically refine and strengthen prompt (this is what she said: "i mean it would be preferred if the icon looked more like the actual item")
+- find a way to improve the accuracy of the similarity search 
+
+overall suggestions from me: 
+
+- need to scrape more brands
+- make sure aritzia embeddings are in database 
+- move the search onto the database using pgvector 
+- also overall improve the prompts of the llms so they are more specific in outputting the description of the object for the icon generation as well as the overall metadata
+- figure out a methodology for the auto outputs the llms give for the names of the clothes
+
+8/4/26
+
+suggestions from hillary:
+
+- extract real pngs of the clothes rather than icons and make it look cleaner, make sure the pngs are transparent
+- should be able to search for clothes through a brand database using a search feature and add to your closet

@@ -808,6 +808,15 @@ def _filter_by_gender(results: list, gender: str | None) -> list:
     return [r for r in results if _item_gender(r) in (gender, None)]
 
 
+def is_index_loaded() -> bool:
+    return _MEM["index"] is not None
+
+
+def warm_index() -> bool:
+    """Load the index into memory (disk → Storage → rebuild). Safe to call from a background thread."""
+    return _ensure_index()
+
+
 def search_similar_products(query_vector, brand: str | None = None,
                             gender: str | None = None,
                             top_k: int = TOP_K) -> list:

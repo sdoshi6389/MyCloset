@@ -23,11 +23,12 @@ def get_user_id_from_token(request):
             return None
 
 def _format_item(r, owner_user_id, owner_email, is_mine):
-    from storage_utils import public_url
+    from storage_utils import public_url, thumb_url
     icon_path = r.get("icon_path")
     # basename() is unsafe here: on Linux it won't strip a Windows "icon_outputs\" prefix.
     icon_name = icon_path.replace("\\", "/").split("/")[-1] if icon_path else None
     return {
+        "thumb_url":       thumb_url(icon_name) if icon_name else None,
         "id":              r["id"],
         "filename":        r["filename"],
         "brand":           r.get("brand"),

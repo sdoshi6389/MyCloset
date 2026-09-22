@@ -125,6 +125,11 @@
   transform: translateY(-2px);
 }
 
+@keyframes closet-shimmer {
+  0%   { background-position: -200% 0; }
+  100% { background-position:  200% 0; }
+}
+
 .closet-card-image {
   position: relative;
   width: 100%;
@@ -137,9 +142,23 @@
   width: 100%;
   height: 100%;
   object-fit: cover;
-  transition: transform 0.2s;
+  transition: transform 0.2s, opacity 0.25s;
 }
 .closet-card-image:hover img:first-child { transform: scale(1.04); }
+
+/* Shimmer skeleton shown while the image is loading */
+.closet-card-image--loading img:first-child {
+  opacity: 0;
+}
+.closet-card-image--loading::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  background: linear-gradient(90deg, #1a1a28 25%, #252538 50%, #1a1a28 75%);
+  background-size: 200% 100%;
+  animation: closet-shimmer 1.4s ease-in-out infinite;
+  z-index: 1;
+}
 
 .closet-card-icon-badge {
   position: absolute;

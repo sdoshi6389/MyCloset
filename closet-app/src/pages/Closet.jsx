@@ -5,7 +5,7 @@ import Layout from "./Layout";
 import { useCircle } from "../context/CircleContext";
 import "./Closet.css";
 
-import { API_BASE as API, iconSrc, photoSrc } from "../config";
+import { API_BASE as API, iconSrc, thumbSrc, photoSrc, fallbackToIcon } from "../config";
 
 const DEFAULT_CATEGORIES = ["Tops", "Bottoms", "Outerwear", "Innerwear", "Accessories", "Shoes"];
 
@@ -49,6 +49,16 @@ function Closet() {
     fetchItems();
     fetchCategories();
   }, [activeCircle]);
+
+  // Stop brand poll and camera stream on unmount
+  useEffect(() => {
+    return () => {
+      stopBrandPoll();
+      if (videoRef.current?.srcObject) {
+        videoRef.current.srcObject.getTracks().forEach((t) => t.stop());
+      }
+    };
+  }, []);
 
   const authHeaders = () => ({ Authorization: `Bearer ${token}` });
 
@@ -117,6 +127,7 @@ function Closet() {
     // Indexed slots preserve the original file selection order regardless of
     // which parallel upload finishes first.
     const slots = new Array(toUpload.length).fill(null);
+    const failedNames = [];
 
     await Promise.all(
       toUpload.map(async (file, idx) => {
@@ -136,6 +147,7 @@ function Closet() {
           }
         } catch (err) {
           console.error(`Upload failed for ${file.name}:`, err);
+          failedNames.push(file.name);
         } finally {
           setUploadProgress((prev) => prev ? { ...prev, done: prev.done + 1 } : null);
         }
@@ -146,6 +158,10 @@ function Closet() {
     setFiles([]);
     setUploading(false);
     setUploadProgress(null);
+
+    if (failedNames.length) {
+      alert(`${failedNames.length} file(s) failed to upload:\n${failedNames.join("\n")}`);
+    }
 
     if (!uploaded.length) return;
 
@@ -376,6 +392,14 @@ function Closet() {
     }
   };
 
+  const stopCamera = () => {
+    if (videoRef.current?.srcObject) {
+      videoRef.current.srcObject.getTracks().forEach((t) => t.stop());
+      videoRef.current.srcObject = null;
+    }
+    setIsCameraOn(false);
+  };
+
   const captureAndUpload = () => {
     const video = videoRef.current;
     const canvas = canvasRef.current;
@@ -387,10 +411,28 @@ function Closet() {
       fd.append("files", blob, "webcam.jpg");
       try {
         setUploading(true);
-        await axios.post(`${API}/upload_closet_images`, fd, {
+        const res = await axios.post(`${API}/upload_closet_images`, fd, {
           headers: { ...authHeaders(), "Content-Type": "multipart/form-data" },
         });
-        fetchItems();
+        stopCamera();
+        // Go through the metadata modal the same as file upload
+        const returned = res.data?.items || [];
+        if (returned.length) {
+          try {
+            const freshRes = await axios.get(`${API}/get_closet_images`, { headers: authHeaders() });
+            const byFilename = Object.fromEntries(freshRes.data.map((i) => [i.filename, i]));
+            setItems(freshRes.data);
+            const ordered = returned.map((i) => byFilename[i.filename] || i);
+            startModalQueue(ordered);
+          } catch {
+            startModalQueue(returned);
+          }
+        } else {
+          fetchItems();
+        }
+      } catch (err) {
+        console.error("Webcam upload failed:", err);
+        alert("Failed to upload webcam capture.");
       } finally {
         setUploading(false);
       }
@@ -454,6 +496,11 @@ function Closet() {
         <button className="btn-secondary" onClick={!isCameraOn ? startCamera : captureAndUpload}>
           {!isCameraOn ? "📷 Camera" : "📸 Capture"}
         </button>
+        {isCameraOn && (
+          <button className="btn-secondary" onClick={stopCamera} style={{ fontSize: "0.78rem" }}>
+            ✕ Stop camera
+          </button>
+        )}
         <button className="btn-secondary" onClick={handleRetagAll} style={{ marginLeft: "auto", fontSize: "0.78rem" }}>
           ✦ Re-tag All
         </button>
@@ -555,7 +602,7 @@ function Closet() {
 
       {/* ── Metadata modal ──────────────────────────────────────────────────── */}
       {activeItem && !faissMatches.length && (
-        <div className="modal-overlay" onClick={() => setActiveItem(null)}>
+        <div className="modal-overlay" onClick={() => { stopBrandPoll(); setActiveItem(null); }}>
           <div className="modal-box" onClick={(e) => e.stopPropagation()}>
             <h3>
               {activeItem.filename}
@@ -611,7 +658,7 @@ function Closet() {
               {activeItem.has_embedding && (
                 <button className="btn-secondary" onClick={handleFindMatch}>Find Match</button>
               )}
-              <button className="btn-secondary" onClick={() => setActiveItem(null)} style={{ marginLeft: "auto" }}>Cancel</button>
+              <button className="btn-secondary" onClick={() => { stopBrandPoll(); setActiveItem(null); }} style={{ marginLeft: "auto" }}>Cancel</button>
             </div>
             <p className="modal-action-hint">
               <strong>Save</strong> stores brand/size/category.
@@ -689,7 +736,7 @@ function Closet() {
       {zoomedItem && (
         <div className="modal-overlay" onClick={() => setZoomedItem(null)}>
           <img
-            src={`${photoSrc(zoomedItem.url)}?t=${Date.now()}`}
+            src={photoSrc(zoomedItem.url)}
             alt="Zoom"
             style={{ maxHeight: "90vh", maxWidth: "90vw", borderRadius: 12 }}
           />
@@ -707,9 +754,11 @@ function iconFilename(iconPath) {
 function ClosetItemCard({ item, ownedByMe, ownerInitial, onZoom, onEdit, onDelete }) {
   const [hovered, setHovered] = useState(false);
   const [hoverPos, setHoverPos] = useState(null);
+  const [imgLoaded, setImgLoaded] = useState(false);
   const cardRef = useRef(null);
 
-  const iconUrl = iconSrc(item.icon_path);
+  const iconUrl  = iconSrc(item.icon_path);
+  const thumbUrl = thumbSrc(item.icon_path);
 
   const hasGptData = !!(item.caption || item.type || item.color || item.style ||
     item.season || item.fabric || item.vibe || item.gender || item.keywords);
@@ -733,12 +782,18 @@ function ClosetItemCard({ item, ownedByMe, ownerInitial, onZoom, onEdit, onDelet
       onMouseLeave={() => { setHovered(false); setHoverPos(null); }}
     >
       {hovered && hasGptData && hoverPos && (
-        <ItemHoverCard item={item} iconUrl={iconUrl} pos={hoverPos} />
+        <ItemHoverCard item={item} iconUrl={thumbUrl || iconUrl} pos={hoverPos} />
       )}
 
-      <div className="closet-card-image" onClick={onZoom}>
-        <img src={photoSrc(item.url)} alt={item.filename} />
-        {iconUrl && <img src={iconUrl} alt="icon" className="closet-card-icon-badge" />}
+      <div className={`closet-card-image${imgLoaded ? "" : " closet-card-image--loading"}`} onClick={onZoom}>
+        <img
+          src={thumbUrl || photoSrc(item.url)}
+          alt={item.filename}
+          loading="lazy"
+          decoding="async"
+          onLoad={() => setImgLoaded(true)}
+          onError={fallbackToIcon}
+        />
         {!ownedByMe && ownerInitial && (
           <div className="circle-owner-badge">{ownerInitial}</div>
         )}

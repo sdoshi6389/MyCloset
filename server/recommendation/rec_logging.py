@@ -5,6 +5,7 @@ Tables expected in Supabase (create via SQL editor — see bottom of this file):
   - recommendation_logs
   - user_events
 """
+import threading
 import uuid
 from datetime import datetime, timezone
 from db import get_supa
@@ -20,13 +21,18 @@ def log_recommendations(
     """
     Write one row per returned candidate to recommendation_logs.
     Called by the engine after the final ranked list is built.
-    Non-blocking: exceptions are swallowed so a DB error never kills the API.
+    Ids are stamped synchronously (the response needs them); the insert itself
+    runs on a daemon thread so the API doesn't wait on a DB round-trip.
     """
-    supa = get_supa()
     rows = []
     for rank, item in enumerate(candidates):
+        # Stamp the id onto the candidate so the API response carries it and the
+        # client can echo it back to /recommend/events — that is the only way the
+        # was_clicked / was_added / was_saved / was_rejected flags ever get set.
+        rec_id = str(uuid.uuid4())
+        item["recommendation_id"] = rec_id
         rows.append({
-            "recommendation_id": str(uuid.uuid4()),
+            "recommendation_id": rec_id,
             "user_id":           user_id,
             "slot":              slot,
             "outfit_ctx":        outfit_ctx,
@@ -41,10 +47,14 @@ def log_recommendations(
 
     if not rows:
         return
-    try:
-        supa.table("recommendation_logs").insert(rows).execute()
-    except Exception as e:
-        print(f"⚠️  recommendation_logs insert failed: {e}")
+
+    def _insert():
+        try:
+            get_supa().table("recommendation_logs").insert(rows).execute()
+        except Exception as e:
+            print(f"⚠️  recommendation_logs insert failed: {e}")
+
+    threading.Thread(target=_insert, daemon=True, name="rec-log").start()
 
 
 def log_event(

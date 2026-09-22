@@ -1,111 +1,136 @@
-from playwright.sync_api import sync_playwright, TimeoutError
-import time
-import sys, os
+"""Alo Yoga women's scraper — custom GraphQL API at api.aloyoga.com.
+Each node in GetCollectionData is already one-per-color-variant; title includes
+" - Color" suffix which is stripped. Pagination uses offset increments of LIMIT.
+"""
+import sys, os, json, urllib.parse
 sys.path.insert(0, os.path.dirname(__file__))
-from db_insert import ensure_table, insert_products
 
-TABLE = "products_alo_womens"
-START_URL = "https://www.aloyoga.com/collections/womens-shop-all"
-BASE_URL = "https://www.aloyoga.com"
+from playwright.sync_api import sync_playwright
+from playwright_stealth import Stealth
 
-def infinite_scroll(page, max_scrolls=500, wait=3.5):
-    print("Scrolling to load all products...", flush=True)
+from db_insert import insert_products, ensure_table
 
-    prev_count = 0
-    stall = 0
-    step = 0
+TABLE  = "products_alo_womens"
+BASE   = "https://www.aloyoga.com"
+LIMIT  = 100
+HASH   = "1647816df62eafdb2ef8305209f54c5c24a715ee12af8e0a86721913abb10dd1"
+HANDLE = "womens-shop-all"
 
-    while step < max_scrolls:
-        step += 1
 
-        # Always jump to the actual bottom of the document so new batches trigger
-        page.evaluate("window.scrollTo(0, document.body.scrollHeight)")
-        time.sleep(wait)
+def p(*args):
+    try:
+        print(*args, flush=True)
+    except UnicodeEncodeError:
+        print(*(str(a).encode("ascii", "replace").decode() for a in args), flush=True)
 
-        count = page.locator(".PlpTile").count()
-        print(f"  Scroll {step}: {count} products", flush=True)
 
-        if count > prev_count:
-            stall = 0
-            prev_count = count
-        else:
-            stall += 1
-            if stall >= 4:
-                # One last nudge: scroll up slightly then back to bottom
-                page.evaluate("window.scrollBy(0, -400)")
-                time.sleep(1)
-                page.evaluate("window.scrollTo(0, document.body.scrollHeight)")
-                time.sleep(wait)
-                final = page.locator(".PlpTile").count()
-                if final > prev_count:
-                    print(f"  Scroll {step} (nudge): {final} products", flush=True)
-                    prev_count = final
-                    stall = 0
-                else:
-                    print(f"  Stopped — no new products after {stall} stalls.", flush=True)
-                    break
+def api_url(offset):
+    variables  = json.dumps({"handle": HANDLE, "offset": offset, "limit": LIMIT,
+                              "sortKey": "DEFAULT", "filters": [], "countryCode": "US"})
+    extensions = json.dumps({"persistedQuery": {"version": 1, "sha256Hash": HASH}})
+    return (
+        "https://api.aloyoga.com/product-service/graphql"
+        "?opName=GetCollectionData&operationName=GetCollectionData"
+        f"&variables={urllib.parse.quote(variables)}"
+        f"&extensions={urllib.parse.quote(extensions)}"
+    )
 
-def extract_products(page):
-    print("🛍️ Extracting product data...")
-    cards = page.query_selector_all(".PlpTile")
-    products = []
 
-    for card in cards:
-        try:
-            # Title: from product name inside <p class="body semibold">
-            title_elem = card.query_selector("p.body.semibold")
-            title = title_elem.inner_text().strip() if title_elem else "MISSING_TITLE"
+def fetch_page(page, offset):
+    url = api_url(offset)
+    result = page.evaluate(f"""
+        async () => {{
+            const r = await fetch({json.dumps(url)});
+            if (!r.ok) return null;
+            return await r.json();
+        }}
+    """)
+    if not result:
+        return [], 0
+    col   = (result.get("data") or {}).get("productsByCollectionHandle") or {}
+    prods = col.get("products") or {}
+    nodes = prods.get("nodes") or []
+    total = prods.get("totalCount") or 0
+    return nodes, total
 
-            # Price: from <span class="product-price regular__price">
-            price_elem = card.query_selector("span.product-price")
-            price = price_elem.inner_text().strip() if price_elem else "MISSING_PRICE"
 
-            # URL
-            link_elem = card.query_selector("a[href]")
-            url = link_elem.get_attribute("href") if link_elem else None
-            full_url = BASE_URL + url if url else "MISSING_URL"
+def parse_node(node):
+    title_raw = (node.get("title") or "").strip()
+    title = title_raw.rsplit(" - ", 1)[0] if " - " in title_raw else title_raw
 
-            # Image: get first <img> inside the swiper
-            img_elem = card.query_selector("img")
-            image_url = img_elem.get_attribute("src") if img_elem else "MISSING_IMAGE"
+    color = ""
+    for opt in node.get("options") or []:
+        if opt.get("name") == "Color":
+            vals = opt.get("values") or []
+            color = vals[0] if vals else ""
+            break
 
-            # Color(s): grab all swatch buttons under .swatches-wrapper
-            swatch_buttons = card.query_selector_all(".swatches-wrapper button[aria-label]")
-            colors = [btn.get_attribute("aria-label") for btn in swatch_buttons if btn.get_attribute("aria-label")]
-            color_string = ", ".join(colors) if colors else "MISSING_COLOR"
+    amount = (node.get("priceRange") or {}).get("minVariantPrice", {}).get("amount")
+    try:
+        price = f"${float(amount):.2f}" if amount is not None else ""
+    except (ValueError, TypeError):
+        price = ""
 
-            products.append({
-                "title": title,
-                "price": price,
-                "color": color_string,
-                "url": full_url,
-                "image": image_url
-            })
+    images = node.get("images") or []
+    image  = images[0] if images else ""
 
-        except Exception as e:
-            print(f"⚠️ Error extracting a product: {e}")
+    url = node.get("onlineStoreUrl") or ""
 
-    print(f"✅ Extracted {len(products)} products.")
-    return products
+    return {"title": title, "color": color, "price": price, "image": image, "images": images, "url": url}
+
 
 def main():
-    all_products = []
+    p(f"Alo Yoga women's scraper -> table: {TABLE}")
+    ensure_table(TABLE)
 
-    with sync_playwright() as p:
-        browser = p.chromium.launch(headless=False)
-        context = browser.new_context()
-        page = context.new_page()
-        page.goto(START_URL, timeout=60000)
-        page.wait_for_timeout(6000)
+    with sync_playwright() as pw:
+        browser = pw.chromium.launch(headless=True)
+        ctx = browser.new_context(
+            user_agent=(
+                "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 "
+                "(KHTML, like Gecko) Chrome/125.0.0.0 Safari/537.36"
+            ),
+            locale="en-US",
+            viewport={"width": 1280, "height": 900},
+        )
+        page = ctx.new_page()
+        Stealth().apply_stealth_sync(page)
 
-        infinite_scroll(page)
-        all_products = extract_products(page)
+        p("Loading aloyoga.com...")
+        page.goto(BASE, timeout=60000)
+        page.wait_for_timeout(5000)
+
+        total_ins = total_skip = 0
+        offset = 0
+        total  = None
+
+        while True:
+            nodes, count = fetch_page(page, offset)
+            if not nodes:
+                break
+            if total is None:
+                total = count
+                p(f"Total products: {total}")
+
+            rows = [parse_node(n) for n in nodes]
+            rows = [r for r in rows if r["title"] and r["url"]]
+
+            ins, skip = insert_products(TABLE, rows) if rows else (0, 0)
+            total_ins  += ins
+            total_skip += skip
+
+            end = offset + len(nodes)
+            p(f"  offset {offset}-{end}: {ins} inserted, {skip} skipped")
+
+            offset += LIMIT
+            if offset >= (total or 0):
+                break
 
         browser.close()
 
-    ensure_table(TABLE)
-    ins, skip = insert_products(TABLE, all_products)
-    print(f"\nDone! {ins} inserted, {skip} skipped (already in DB).")
+    p(f"\n{'='*60}")
+    p(f"DONE! {total_ins} inserted, {total_skip} skipped")
+
 
 if __name__ == "__main__":
     main()

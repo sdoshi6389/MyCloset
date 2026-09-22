@@ -78,6 +78,16 @@ def compute_user_profile(user_id: int) -> dict:
             sv = sv / norm
         style_vector = sv
 
+    # Preserve feedback nudges accumulated via update_pref_vector — only seed from
+    # style_vector on first ever computation (when no profile row exists yet).
+    existing_pref = None
+    try:
+        ep_res = supa.table("user_profiles").select("pref_vector").eq("user_id", user_id).execute()
+        if ep_res.data:
+            existing_pref = ep_res.data[0].get("pref_vector")
+    except Exception:
+        pass
+
     profile = {
         "user_id":          user_id,
         "vibe_weights":     vibe_weights,
@@ -85,7 +95,9 @@ def compute_user_profile(user_id: int) -> dict:
         "formality_center": formality_center,
         "formality_std":    formality_std,
         "style_vector":     style_vector.tolist() if style_vector is not None else None,
-        "pref_vector":      style_vector.tolist() if style_vector is not None else None,
+        "pref_vector":      existing_pref if existing_pref is not None else (
+                                style_vector.tolist() if style_vector is not None else None
+                            ),
         "updated_at":       datetime.now(timezone.utc).isoformat(),
     }
 
