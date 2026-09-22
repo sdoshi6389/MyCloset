@@ -15,6 +15,7 @@ processed at most once ever.
 """
 import os
 import hashlib
+import re
 import tempfile
 import base64
 
@@ -60,6 +61,27 @@ _TABLE_SUFFIXES = [
     "skirts", "bags", "jewelry", "swimwear", "activewear", "coats", "sets",
 ]
 
+
+# Lingerie and swim are shot on a model against a styled background far more
+# often than other categories, and both free steps decline those: PIL needs a
+# near-white background and rembg's cloth-seg keeps the body. Sending them
+# straight to Gemini skips ~3.3s of attempts that measurement says will fail.
+_GEMINI_FIRST_SLOTS = {"innerwear", "underwear"}
+_GEMINI_FIRST_RE = re.compile(
+    r"\b("
+    r"bra|bras|bralette|bandeau|corset|bustier|basque|"
+    r"bikini|tankini|monokini|swim|swimsuit|swimwear|boardshort|trunks|"
+    r"lingerie|intimate|intimates|negligee|chemise|camisole|babydoll|teddy|"
+    r"thong|panty|panties|knicker|knickers|brief|briefs|boyshort|garter|"
+    r"bodysuit|one[- ]piece|slip dress|nightgown|nightwear|sleepwear"
+    r")\b", re.IGNORECASE)
+
+
+def _gemini_first(slot: str | None, product_name: str | None) -> bool:
+    """True when the free steps are not worth attempting for this product."""
+    if slot and slot.lower() in _GEMINI_FIRST_SLOTS:
+        return True
+    return bool(product_name and _GEMINI_FIRST_RE.search(product_name))
 
 # ── Cache helpers ─────────────────────────────────────────────────────────────
 
@@ -889,14 +911,21 @@ def extract_catalog_icon(image_url: str,
     if not best_tmp:
         return None, -1
 
+    # An explicit force_step is a manual request from the rail's next-step
+    # button, so it overrides the routing below.
+    skip_free = force_step == 0 and _gemini_first(slot, product_name)
+    if skip_free:
+        why = slot if (slot and slot.lower() in _GEMINI_FIRST_SLOTS) else product_name
+        print(f"↳ lingerie/swim ({why}) - skipping free steps, straight to Gemini")
+
     try:
         # ── Step 0: PIL white-bg removal (free, ~0¢) ─────────────────────
-        if force_step <= 0 and _try_pil_extract(best_tmp, out_path):
+        if not skip_free and force_step <= 0 and _try_pil_extract(best_tmp, out_path):
             _db_save(image_url, slot, out_path)
             return out_path, 0
 
         # ── Step 1: rembg cloth-seg (~0¢ local) ──────────────────────────
-        if force_step <= 1 and _rembg_extract(best_tmp, out_path):
+        if not skip_free and force_step <= 1 and _rembg_extract(best_tmp, out_path):
             _db_save(image_url, slot, out_path)
             return out_path, 1
 
