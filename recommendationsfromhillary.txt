@@ -22,3 +22,6 @@ suggestions from hillary:
 
 - extract real pngs of the clothes rather than icons and make it look cleaner, make sure the pngs are transparent
 - should be able to search for clothes through a brand database using a search feature and add to your closet
+
+
+#add an api for location and weather and then it should recommend outfits based on the weather

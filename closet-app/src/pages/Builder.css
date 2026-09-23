@@ -723,13 +723,53 @@
 
 /* ── Bottom closet rail ──────────────────────────────────────────────────── */
 .pb-rail {
-  height: 300px;
+  /* height is set inline and is user-draggable via .pb-rail-resizer */
   flex-shrink: 0;
   border-top: 1px solid rgba(255,255,255,0.08);
   background: rgba(255,255,255,0.028);
   backdrop-filter: blur(20px);
   overflow: hidden;
   display: flex;
+}
+
+/* ── Rail resize handle ──────────────────────────────────────────────────── */
+.pb-rail-resizer {
+  flex-shrink: 0;
+  height: 11px;
+  margin-top: -5px;          /* straddle the seam without adding layout height */
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: ns-resize;
+  position: relative;
+  z-index: 5;
+  touch-action: none;
+}
+.pb-rail-resizer::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  background: transparent;
+  transition: background var(--dur-fast);
+}
+.pb-rail-resizer:hover::before,
+.pb-rail-resizer:focus-visible::before {
+  background: linear-gradient(90deg, transparent, rgba(167,139,250,0.22), transparent);
+}
+.pb-rail-resizer:focus-visible { outline: none; }
+
+.pb-rail-resizer-grip {
+  width: 46px;
+  height: 3px;
+  border-radius: var(--radius-full);
+  background: rgba(255,255,255,0.16);
+  transition: background var(--dur-fast), width var(--dur-base) var(--ease-out);
+  pointer-events: none;
+}
+.pb-rail-resizer:hover .pb-rail-resizer-grip,
+.pb-rail-resizer:focus-visible .pb-rail-resizer-grip {
+  background: var(--accent-lavender);
+  width: 64px;
 }
 
 .pb-rail-track {

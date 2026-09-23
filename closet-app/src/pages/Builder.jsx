@@ -203,6 +203,56 @@ function computeEditorial(outfit) {
 
 // ── Builder ───────────────────────────────────────────────────────────────────
 export default function Builder() {
+  // Rail height is draggable and remembered, so the canvas/closet split is the
+  // user's choice rather than a fixed 300px.
+  const RAIL_MIN = 140, RAIL_MAX_VH = 0.62;
+  const [railH, setRailH] = useState(() => {
+    const saved = Number(localStorage.getItem("pb_rail_h"));
+    return saved >= RAIL_MIN ? saved : 300;
+  });
+  const railDrag = useRef(null);
+
+  const onRailResizeStart = useCallback((e) => {
+    e.preventDefault();
+    const startY = (e.touches ? e.touches[0] : e).clientY;
+    railDrag.current = { startY, startH: railH };
+    const move = (ev) => {
+      if (!railDrag.current) return;
+      const y = (ev.touches ? ev.touches[0] : ev).clientY;
+      // Dragging up grows the rail, so the delta is inverted.
+      const next = railDrag.current.startH + (railDrag.current.startY - y);
+      const max = Math.round(window.innerHeight * RAIL_MAX_VH);
+      setRailH(Math.max(RAIL_MIN, Math.min(max, next)));
+    };
+    const up = () => {
+      railDrag.current = null;
+      document.body.style.userSelect = "";
+      document.body.style.cursor = "";
+      window.removeEventListener("mousemove", move);
+      window.removeEventListener("mouseup", up);
+      window.removeEventListener("touchmove", move);
+      window.removeEventListener("touchend", up);
+    };
+    document.body.style.userSelect = "none";
+    document.body.style.cursor = "ns-resize";
+    window.addEventListener("mousemove", move);
+    window.addEventListener("mouseup", up);
+    window.addEventListener("touchmove", move, { passive: false });
+    window.addEventListener("touchend", up);
+  }, [railH]);
+
+  useEffect(() => { localStorage.setItem("pb_rail_h", String(railH)); }, [railH]);
+
+  // Keyboard equivalent, so the split is not mouse-only.
+  const onRailResizeKey = useCallback((e) => {
+    const step = e.shiftKey ? 48 : 16;
+    if (e.key === "ArrowUp" || e.key === "ArrowDown") {
+      e.preventDefault();
+      const max = Math.round(window.innerHeight * RAIL_MAX_VH);
+      setRailH((h) => Math.max(RAIL_MIN, Math.min(max, h + (e.key === "ArrowUp" ? step : -step))));
+    }
+  }, []);
+
   const [items, setItems]       = useState([]);
   const [outfit, setOutfit]     = useState(() =>
     Object.fromEntries(ZONES.map((z) => [z.id, null]))
@@ -1065,7 +1115,22 @@ export default function Builder() {
         )}
 
         {/* ── Bottom closet rail ── */}
-        <div className="pb-rail">
+        <div
+          className="pb-rail-resizer"
+          role="separator"
+          aria-orientation="horizontal"
+          aria-label="Resize closet panel"
+          aria-valuenow={railH}
+          tabIndex={0}
+          onMouseDown={onRailResizeStart}
+          onTouchStart={onRailResizeStart}
+          onKeyDown={onRailResizeKey}
+          onDoubleClick={() => setRailH(300)}
+          title="Drag to resize — double-click to reset"
+        >
+          <span className="pb-rail-resizer-grip" />
+        </div>
+        <div className="pb-rail" style={{ height: railH }}>
           <div className="pb-rail-track">
             {myItemsByCategory.map(({ label, items: groupItems }) => (
               <div key={label} className="pb-rail-section">
