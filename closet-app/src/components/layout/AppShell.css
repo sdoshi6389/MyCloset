@@ -14,6 +14,7 @@
   z-index: 2;
   top: 0;
   width: 232px;
+  transition: width var(--dur-slow) var(--ease-out);
   height: 100vh;
   flex-shrink: 0;
   display: flex;
@@ -26,14 +27,73 @@
   border-right: 1px solid rgba(255,255,255,0.07);
 }
 
+/* ── Collapsed rail ──────────────────────────────────────────────────────── */
+.sidebar--collapsed { width: 74px; }
+.sidebar--collapsed .sidebar-link-label,
+.sidebar--collapsed .sidebar-user-email,
+.sidebar--collapsed .circle-switcher-label { display: none; }
+.sidebar--collapsed .sidebar-brand {
+  padding-left: 0;
+  padding-right: 0;
+  text-align: center;
+  letter-spacing: 0.02em;
+}
+.sidebar--collapsed .sidebar-top { padding: 0 var(--space-2) var(--space-4); }
+.sidebar--collapsed .sidebar-user { justify-content: center; padding: 0 0 var(--space-4); }
+.sidebar--collapsed .sidebar-nav { padding: 0 var(--space-2); }
+.sidebar--collapsed .sidebar-link,
+.sidebar--collapsed .sidebar-logout { justify-content: center; padding-left: 0; padding-right: 0; }
+.sidebar--collapsed .circle-switcher { padding-left: var(--space-2); padding-right: var(--space-2); }
+.sidebar--collapsed .circle-switcher-pills { justify-content: center; }
+.sidebar--collapsed .circle-pill { padding: 4px 8px; }
+.sidebar--collapsed .sidebar-footer { padding-left: var(--space-2); padding-right: var(--space-2); }
+/* Chevron points the other way once collapsed */
+.sidebar--collapsed .sidebar-toggle-chevron { transform: rotate(-135deg); margin-left: -2px; }
+
+/* ── Brand row + toggle ──────────────────────────────────────────────────── */
+.sidebar-top {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  padding: 0 var(--space-5) var(--space-5);
+  margin-bottom: var(--space-4);
+  border-bottom: 1px solid rgba(255,255,255,0.07);
+}
+
+.sidebar-toggle {
+  flex-shrink: 0;
+  width: 26px;
+  height: 26px;
+  margin-left: auto;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: var(--radius-sm);
+  border: 1px solid rgba(255,255,255,0.1);
+  background: rgba(255,255,255,0.04);
+  cursor: pointer;
+  transition: background var(--dur-fast), border-color var(--dur-fast);
+}
+.sidebar-toggle:hover {
+  background: rgba(167,139,250,0.16);
+  border-color: rgba(167,139,250,0.45);
+}
+.sidebar-toggle-chevron {
+  width: 6px;
+  height: 6px;
+  border-left: 1.5px solid var(--text-secondary);
+  border-bottom: 1.5px solid var(--text-secondary);
+  transform: rotate(45deg);
+  margin-left: 2px;
+  transition: transform var(--dur-base) var(--ease-out);
+}
+
 .sidebar-brand {
   font-size: var(--text-lg);
   font-weight: 600;
   font-style: normal;
   letter-spacing: -0.015em;
-  padding: 0 var(--space-5) var(--space-5);
-  margin-bottom: var(--space-4);
-  border-bottom: 1px solid rgba(255,255,255,0.07);
+  padding: 0;
   background: linear-gradient(92deg, #fff 10%, #c4b5fd 90%);
   -webkit-background-clip: text;
   background-clip: text;

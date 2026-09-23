@@ -1,3 +1,4 @@
+import { useEffect, useState } from "react";
 import { NavLink, useNavigate } from "react-router-dom";
 import { useCircle } from "../../context/CircleContext";
 
@@ -15,6 +16,15 @@ export default function Sidebar() {
   const userEmail    = localStorage.getItem("userEmail") || "";
   const avatarLetter = userEmail ? userEmail[0].toUpperCase() : "?";
 
+  // Collapsed to an icon rail rather than hidden outright, so navigation stays
+  // one click away instead of needing the panel back first.
+  const [collapsed, setCollapsed] = useState(
+    () => localStorage.getItem("sidebar_collapsed") === "1"
+  );
+  useEffect(() => {
+    localStorage.setItem("sidebar_collapsed", collapsed ? "1" : "0");
+  }, [collapsed]);
+
   const handleLogout = () => {
     localStorage.removeItem("token");
     localStorage.removeItem("userEmail");
@@ -23,12 +33,23 @@ export default function Sidebar() {
   };
 
   return (
-    <aside className="sidebar">
-      <div className="sidebar-brand">MyCloset</div>
+    <aside className={`sidebar${collapsed ? " sidebar--collapsed" : ""}`}>
+      <div className="sidebar-top">
+        <div className="sidebar-brand">{collapsed ? "MC" : "MyCloset"}</div>
+        <button
+          className="sidebar-toggle"
+          onClick={() => setCollapsed((c) => !c)}
+          aria-label={collapsed ? "Expand sidebar" : "Collapse sidebar"}
+          aria-expanded={!collapsed}
+          title={collapsed ? "Expand sidebar" : "Collapse sidebar"}
+        >
+          <span className="sidebar-toggle-chevron" />
+        </button>
+      </div>
 
       {userEmail && (
         <div className="sidebar-user">
-          <div className="sidebar-user-avatar">{avatarLetter}</div>
+          <div className="sidebar-user-avatar" title={userEmail}>{avatarLetter}</div>
           <span className="sidebar-user-email" title={userEmail}>{userEmail}</span>
         </div>
       )}
@@ -42,7 +63,7 @@ export default function Sidebar() {
             onClick={() => setActiveCircle(null)}
             title="Your own closet, outfits, and feed from all friends"
           >
-            Just Me
+            {collapsed ? "Me" : "Just Me"}
           </button>
           {circles.map((c) => (
             <button
@@ -51,7 +72,7 @@ export default function Sidebar() {
               onClick={() => setActiveCircle(c)}
               title={c.description || c.name}
             >
-              {c.name}
+              {collapsed ? c.name.slice(0, 2) : c.name}
             </button>
           ))}
         </div>
@@ -63,18 +84,19 @@ export default function Sidebar() {
           <NavLink
             key={to}
             to={to}
+            title={label}
             className={({ isActive }) => `sidebar-link${isActive ? " active" : ""}`}
           >
             <span className="sidebar-icon">{icon}</span>
-            <span>{label}</span>
+            <span className="sidebar-link-label">{label}</span>
           </NavLink>
         ))}
       </nav>
 
       <div className="sidebar-footer">
-        <button className="sidebar-logout" onClick={handleLogout}>
+        <button className="sidebar-logout" onClick={handleLogout} title="Log out">
           <span className="sidebar-icon">🚪</span>
-          Log out
+          <span className="sidebar-link-label">Log out</span>
         </button>
       </div>
     </aside>
