@@ -7,7 +7,7 @@ import "./Closet.css";
 
 import { API_BASE as API, iconSrc, thumbSrc, photoSrc, fallbackToIcon } from "../config";
 import { motion } from "framer-motion";
-import { colorWash, colorWashHover, colorEdge } from "../lib/colorFamily";
+import { cardTint, cardTintHover, colorEdge } from "../lib/colorFamily";
 
 const DEFAULT_CATEGORIES = ["Tops", "Bottoms", "Outerwear", "Innerwear", "Accessories", "Shoes"];
 
@@ -782,8 +782,8 @@ function ClosetItemCard({ item, index = 0, ownedByMe, ownerInitial, onZoom, onEd
       ref={cardRef}
       className="closet-card"
       style={{
-        "--card-wash": colorWash(item.color),
-        "--card-wash-hover": colorWashHover(item.color),
+        "--card-tint": cardTint(item.color),
+        "--card-tint-hover": cardTintHover(item.color),
         "--card-edge": colorEdge(item.color),
       }}
       initial={{ opacity: 0, y: 28, scale: 0.94 }}

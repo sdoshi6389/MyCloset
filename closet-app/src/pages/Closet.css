@@ -104,9 +104,14 @@
   position: relative;
   display: flex;
   flex-direction: column;
-  background: var(--bg-base);
+  /* Item colour rides the card's top edge and falls off toward the middle.
+     Nothing sits behind the garment itself. */
+  background: var(--card-tint, none), var(--bg-base);
   border: 1px solid var(--border-subtle);
   border-radius: var(--radius-md);
+  /* The image is inset so the tint reads as a rim around it rather than being
+     hidden behind it. */
+  padding: 7px;
   overflow: hidden;
   transition: border-color var(--dur-base) var(--ease-out),
               transform var(--dur-base) var(--ease-out),
@@ -114,6 +119,7 @@
 }
 .closet-card:hover {
   /* --card-edge is set per item from its colour */
+  background: var(--card-tint-hover, none), var(--bg-base);
   border-color: color-mix(in srgb, var(--card-edge, #a78bfa) 70%, transparent);
   box-shadow: 0 12px 40px -8px color-mix(in srgb, var(--card-edge, #a78bfa) 45%, transparent),
               var(--shadow-card);
@@ -126,46 +132,15 @@
 
 .closet-card-image {
   position: relative;
+  z-index: 1;
   width: 100%;
   aspect-ratio: 1;
   overflow: hidden;
   cursor: zoom-in;
+  border-radius: var(--radius-sm);
   background: var(--bg-page);
 }
-/* Colour backdrop behind the garment, keyed off the item's own colour. */
-.closet-card-image::before {
-  content: "";
-  position: absolute;
-  inset: 0;
-  background: var(--card-wash, transparent);
-  transition: opacity var(--dur-base) var(--ease-out);
-  pointer-events: none;
-}
-/* Brighter gradient cross-fades in on hover rather than just changing alpha. */
-.closet-card-image::after {
-  content: "";
-  position: absolute;
-  inset: 0;
-  background: var(--card-wash-hover, transparent);
-  opacity: 0;
-  transition: opacity var(--dur-base) var(--ease-out);
-  pointer-events: none;
-}
-.closet-card:hover .closet-card-image::after { opacity: 1; }
-
-/* Colour also bleeds into the card body so the tile reads as one block. */
-.closet-card-body {
-  position: relative;
-}
-.closet-card-body::before {
-  content: "";
-  position: absolute;
-  inset: 0;
-  background: var(--card-wash, transparent);
-  opacity: 0.22;
-  pointer-events: none;
-}
-.closet-card-body > * { position: relative; z-index: 1; }
+/* The image area stays plain: a tint behind a garment fights the garment. */
 
 .closet-card-image img:first-child {
   position: relative;
@@ -205,10 +180,12 @@
 }
 
 .closet-card-body {
+  position: relative;
+  z-index: 1;
   display: flex;
   flex-direction: column;
   flex: 1;
-  padding: var(--space-3);
+  padding: var(--space-3) var(--space-2) var(--space-1);
   gap: 2px;
 }
 

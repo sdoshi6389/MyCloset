@@ -29,21 +29,21 @@ export function colorFamily(color) {
   return "slate";            // black, grey, white and anything unrecognised
 }
 
-/** Gradient backdrop sitting behind a garment cutout.
- *  Strong enough to read as a colour block at a glance, still dark enough that a
- *  black or white garment keeps its contrast against it. */
-export function colorWash(color) {
+/** Card highlight: colour gathers at the card's outer edge and falls away
+ *  toward the middle, so the tile is rimmed in the item's own colour rather
+ *  than having anything sit behind the garment. */
+export function cardTint(color) {
   const { a, b } = FAMILIES[colorFamily(color)];
-  return `linear-gradient(150deg, ${a}8c 0%, ${b}59 42%, ${b}1f 78%, transparent 100%)`;
+  return `radial-gradient(130% 92% at 50% -12%, ${a}b0 0%, ${b}4d 38%, transparent 72%)`;
 }
 
-/** Brighter variant used on hover. */
-export function colorWashHover(color) {
+/** Brighter version of the same falloff, cross-faded in on hover. */
+export function cardTintHover(color) {
   const { a, b } = FAMILIES[colorFamily(color)];
-  return `linear-gradient(150deg, ${a}b8 0%, ${b}80 42%, ${b}33 78%, transparent 100%)`;
+  return `radial-gradient(130% 92% at 50% -12%, ${a}e6 0%, ${b}80 38%, transparent 76%)`;
 }
 
-/** Saturated edge used for hover borders and accents. */
+/** Saturated edge used for hover borders and glows. */
 export function colorEdge(color) {
   return FAMILIES[colorFamily(color)].a;
 }
