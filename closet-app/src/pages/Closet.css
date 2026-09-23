@@ -148,6 +148,10 @@
   /* contain, not cover: these are garment photos and cropping cuts sleeves,
      hems and collars straight off. */
   object-fit: contain;
+  /* There is no global border-box reset, so without this the padding is added
+     outside the 100% width and the garment centres half the padding to the
+     right of the tile. */
+  box-sizing: border-box;
   padding: var(--space-3);
   transition: transform var(--dur-slow) var(--ease-out), opacity var(--dur-base);
 }

@@ -830,6 +830,7 @@
   width: 72px;
   height: 72px;
   object-fit: contain;
+  box-sizing: border-box;   /* same reason as the closet card image */
   padding: 5px;
   border-radius: var(--radius-sm);
   background: rgba(255,255,255,0.04);
