@@ -29,18 +29,18 @@ export function colorFamily(color) {
   return "slate";            // black, grey, white and anything unrecognised
 }
 
-/** Card highlight: colour gathers at the card's outer edge and falls away
- *  toward the middle, so the tile is rimmed in the item's own colour rather
- *  than having anything sit behind the garment. */
+/** Card highlight: colour gathers along the card's bottom edge and climbs into
+ *  the tile, fading out before it reaches the garment. Anchored low so the
+ *  photo area stays exactly as dark as it was. */
 export function cardTint(color) {
   const { a, b } = FAMILIES[colorFamily(color)];
-  return `radial-gradient(130% 92% at 50% -12%, ${a}b0 0%, ${b}4d 38%, transparent 72%)`;
+  return `radial-gradient(150% 78% at 50% 112%, ${a}c4 0%, ${a}70 26%, ${b}33 52%, transparent 78%)`;
 }
 
-/** Brighter version of the same falloff, cross-faded in on hover. */
+/** Brighter version of the same climb, cross-faded in on hover. */
 export function cardTintHover(color) {
   const { a, b } = FAMILIES[colorFamily(color)];
-  return `radial-gradient(130% 92% at 50% -12%, ${a}e6 0%, ${b}80 38%, transparent 76%)`;
+  return `radial-gradient(150% 78% at 50% 112%, ${a}f2 0%, ${a}a0 26%, ${b}55 52%, transparent 82%)`;
 }
 
 /** Saturated edge used for hover borders and glows. */
