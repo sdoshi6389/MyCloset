@@ -86,3 +86,9 @@ AS $$
 $$;
 
 GRANT EXECUTE ON FUNCTION match_products(vector(512), int, text, text) TO anon, authenticated, service_role;
+
+
+-- PostgREST caches the schema and does not notice new tables or functions on its
+-- own, so the REST client keeps returning PGRST205 ("not found in the schema
+-- cache") even though the objects exist. This tells it to reload.
+NOTIFY pgrst, 'reload schema';
