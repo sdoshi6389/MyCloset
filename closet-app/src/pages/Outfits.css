@@ -84,7 +84,7 @@
 .wc-composition {
   background: #0b0b18;
   border: 1px solid rgba(255, 255, 255, 0.038);
-  border-radius: 12px;
+  border-radius: var(--radius-md);
   padding: 10px 12px;
   min-height: 56px;
   display: flex;
@@ -169,7 +169,7 @@
 .wc-recs {
   background: rgba(42, 26, 78, 0.24);
   border: 1px solid rgba(100, 66, 170, 0.14);
-  border-radius: 12px;
+  border-radius: var(--radius-md);
   padding: 12px;
 }
 .wc-recs-title {
@@ -204,7 +204,7 @@
 .outfit-card {
   background: #121218;
   border: 1px solid var(--bg-surface);
-  border-radius: 20px;
+  border-radius: var(--radius-lg);
   overflow: hidden;
   transition: border-color 0.15s, transform 0.15s, box-shadow 0.15s;
   cursor: default;

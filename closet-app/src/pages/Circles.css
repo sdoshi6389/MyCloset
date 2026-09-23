@@ -36,13 +36,17 @@
   align-items: center;
   gap: 10px;
   padding: 10px 10px;
-  border-radius: 10px;
+  border-radius: var(--radius-md);
   cursor: pointer;
   transition: background 0.15s;
   margin-bottom: 4px;
 }
-.circle-list-item:hover  { background: var(--bg-raised); }
-.circle-list-item.active { background: var(--surface-violet); }
+.circle-list-item:hover  { background: rgba(255,255,255,0.028);
+  backdrop-filter: blur(16px); }
+.circle-list-item.active {
+  background: linear-gradient(135deg, rgba(196,181,253,0.22), rgba(124,58,237,0.3));
+  border-color: rgba(196,181,253,0.35);
+}
 
 .circle-list-icon { font-size: 1.3rem; }
 
@@ -74,8 +78,8 @@
   gap: 12px;
   padding: 10px;
   background: var(--bg-page);
-  border: 1px solid var(--bg-elevated);
-  border-radius: 10px;
+  border: 1px solid rgba(255,255,255,0.08);
+  border-radius: var(--radius-md);
 }
 
 .member-avatar {
@@ -115,7 +119,7 @@
   gap: 14px;
   margin-bottom: 20px;
   padding-bottom: 16px;
-  border-bottom: 1px solid var(--bg-elevated);
+  border-bottom: 1px solid rgba(255,255,255,0.08);
 }
 
 .shared-closet-grid {
@@ -128,8 +132,8 @@
 
 .shared-closet-card {
   background: var(--bg-page);
-  border: 1px solid var(--bg-elevated);
-  border-radius: 10px;
+  border: 1px solid rgba(255,255,255,0.08);
+  border-radius: var(--radius-md);
   overflow: hidden;
   transition: border-color 0.15s;
 }
@@ -161,8 +165,9 @@
 .scc-chip {
   font-size: 0.68rem;
   color: var(--text-soft);
-  background: var(--bg-raised);
-  border-radius: 20px;
+  background: rgba(255,255,255,0.028);
+  backdrop-filter: blur(16px);
+  border-radius: var(--radius-lg);
   padding: 2px 7px;
   display: inline-block;
   width: fit-content;

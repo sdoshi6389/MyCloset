@@ -13,7 +13,7 @@
   background: #5a2a7a;
   color: #e0c8ff;
   border: 1px solid #7a4a9a;
-  border-radius: 20px;
+  border-radius: var(--radius-lg);
   padding: 4px 12px;
   font-size: 0.8rem;
   cursor: pointer;
@@ -54,7 +54,8 @@
   padding: 6px 10px;
   transition: background 0.15s;
 }
-.my-status-display:hover { background: var(--bg-raised); }
+.my-status-display:hover { background: rgba(255,255,255,0.028);
+  backdrop-filter: blur(16px); }
 
 .my-status-text { color: var(--text-muted); font-size: 0.875rem; flex: 1; }
 .my-status-edit-hint { color: var(--text-faint); font-size: 0.8rem; }
@@ -71,7 +72,7 @@
   display: flex;
   gap: 2px;
   background: var(--bg-page);
-  border-radius: 10px;
+  border-radius: var(--radius-md);
   padding: 3px;
   margin-bottom: 24px;
 }
@@ -93,11 +94,17 @@
   transition: background 0.15s, color 0.15s;
 }
 .friends-tab:hover  { background: #1e1e28; color: var(--text-secondary); }
-.friends-tab.active { background: var(--surface-violet); color: var(--accent-lavender); }
+.friends-tab.active {
+  background: linear-gradient(135deg, rgba(196,181,253,0.22), rgba(124,58,237,0.3));
+  border-color: rgba(196,181,253,0.4);
+  color: var(--text-bright);
+  box-shadow: 0 6px 20px -10px rgba(124,58,237,0.8);
+}
 
 .tab-count {
-  background: var(--bg-surface);
-  border-radius: 20px;
+  background: rgba(255,255,255,0.028);
+  backdrop-filter: blur(16px);
+  border-radius: var(--radius-lg);
   padding: 1px 7px;
   font-size: 0.72rem;
   color: var(--text-soft);
@@ -106,7 +113,7 @@
 .tab-badge {
   background: #6a2a9a;
   color: #e8d8ff;
-  border-radius: 20px;
+  border-radius: var(--radius-lg);
   padding: 1px 7px;
   font-size: 0.72rem;
 }
@@ -133,9 +140,10 @@
 
 /* ── Friend card ─────────────────────────────────────────────────────────── */
 .friend-card {
-  background: var(--bg-base);
-  border: 1px solid var(--bg-elevated);
-  border-radius: 14px;
+  background: rgba(255,255,255,0.028);
+  backdrop-filter: blur(16px);
+  border: 1px solid rgba(255,255,255,0.08);
+  border-radius: var(--radius-md);
   padding: 16px;
   transition: border-color 0.15s;
 }
@@ -212,9 +220,10 @@
   display: flex;
   align-items: center;
   gap: 12px;
-  background: var(--bg-base);
-  border: 1px solid var(--bg-elevated);
-  border-radius: 12px;
+  background: rgba(255,255,255,0.028);
+  backdrop-filter: blur(16px);
+  border: 1px solid rgba(255,255,255,0.08);
+  border-radius: var(--radius-md);
   padding: 12px 16px;
   transition: border-color 0.15s;
 }
@@ -224,7 +233,8 @@
   width: 38px;
   height: 38px;
   border-radius: 50%;
-  background: var(--bg-surface);
+  background: rgba(255,255,255,0.028);
+  backdrop-filter: blur(16px);
   color: #8888c0;
   font-weight: 700;
   display: flex;
@@ -238,8 +248,9 @@
 .sr-pending {
   font-size: 0.78rem;
   color: var(--text-dim);
-  background: var(--bg-surface);
-  border-radius: 20px;
+  background: rgba(255,255,255,0.028);
+  backdrop-filter: blur(16px);
+  border-radius: var(--radius-lg);
   padding: 4px 12px;
 }
 
@@ -248,9 +259,10 @@
   display: flex;
   align-items: center;
   gap: 12px;
-  background: var(--bg-base);
-  border: 1px solid var(--bg-elevated);
-  border-radius: 12px;
+  background: rgba(255,255,255,0.028);
+  backdrop-filter: blur(16px);
+  border: 1px solid rgba(255,255,255,0.08);
+  border-radius: var(--radius-md);
   padding: 14px 16px;
   margin-bottom: 10px;
 }
@@ -318,7 +330,7 @@
   gap: 14px;
   margin-bottom: 20px;
   padding-bottom: 16px;
-  border-bottom: 1px solid var(--bg-elevated);
+  border-bottom: 1px solid rgba(255,255,255,0.08);
 }
 
 .shared-closet-grid {
@@ -331,8 +343,8 @@
 
 .shared-closet-card {
   background: var(--bg-page);
-  border: 1px solid var(--bg-elevated);
-  border-radius: 10px;
+  border: 1px solid rgba(255,255,255,0.08);
+  border-radius: var(--radius-md);
   overflow: hidden;
   transition: border-color 0.15s;
 }
@@ -358,8 +370,9 @@
 .scc-chip {
   font-size: 0.68rem;
   color: var(--text-soft);
-  background: var(--bg-raised);
-  border-radius: 20px;
+  background: rgba(255,255,255,0.028);
+  backdrop-filter: blur(16px);
+  border-radius: var(--radius-lg);
   padding: 2px 7px;
   display: inline-block;
   width: fit-content;
