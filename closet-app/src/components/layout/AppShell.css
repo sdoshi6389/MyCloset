@@ -1,76 +1,92 @@
 /* ── App shell ──────────────────────────────────────────────────────────── */
 .app-shell {
+  position: relative;
   display: flex;
   min-height: 100vh;
-  background: var(--bg-deepest);
+  background: var(--bg-void);
   color: var(--text-bright);
   font-family: 'Inter', 'Segoe UI', system-ui, sans-serif;
 }
 
 /* ── Sidebar ─────────────────────────────────────────────────────────────── */
 .sidebar {
-  width: 210px;
+  position: sticky;
+  z-index: 2;
+  top: 0;
+  width: 232px;
+  height: 100vh;
   flex-shrink: 0;
-  background: var(--bg-deepest);
-  border-right: 1px solid rgba(167,139,250,0.07);
   display: flex;
   flex-direction: column;
-  padding: 24px 0;
-  position: sticky;
-  top: 0;
-  height: 100vh;
+  padding: var(--space-5) 0;
   overflow-y: auto;
+  /* Glass, matching the landing, rather than a flat panel butted against the page */
+  background: rgba(255,255,255,0.028);
+  backdrop-filter: blur(20px);
+  border-right: 1px solid rgba(255,255,255,0.07);
 }
 
 .sidebar-brand {
-  font-family: 'Cormorant Garamond', serif;
-  font-size: 1.2rem;
-  font-weight: 300;
-  font-style: italic;
-  letter-spacing: 0.04em;
-  color: var(--accent);
-  padding: 0 20px 24px;
-  border-bottom: 1px solid rgba(167,139,250,0.12);
-  margin-bottom: 16px;
+  font-size: var(--text-lg);
+  font-weight: 600;
+  font-style: normal;
+  letter-spacing: -0.015em;
+  padding: 0 var(--space-5) var(--space-5);
+  margin-bottom: var(--space-4);
+  border-bottom: 1px solid rgba(255,255,255,0.07);
+  background: linear-gradient(92deg, #fff 10%, #c4b5fd 90%);
+  -webkit-background-clip: text;
+  background-clip: text;
+  -webkit-text-fill-color: transparent;
 }
 
 .sidebar-nav {
   flex: 1;
   display: flex;
   flex-direction: column;
-  gap: 4px;
-  padding: 0 12px;
+  gap: 2px;
+  padding: 0 var(--space-3);
 }
 
 .sidebar-link {
+  position: relative;
   display: flex;
   align-items: center;
-  gap: 10px;
-  padding: 10px 12px;
-  border-radius: 8px;
+  gap: var(--space-3);
+  padding: 10px var(--space-3);
+  border-radius: var(--radius-sm);
   text-decoration: none;
-  color: #6a6a88;
-  font-size: 0.875rem;
+  color: var(--text-muted);
+  font-size: var(--text-sm);
   font-weight: 500;
-  transition: background 0.15s, color 0.15s;
+  transition: background var(--dur-base) var(--ease-out),
+              color var(--dur-base) var(--ease-out);
 }
-
 .sidebar-link:hover {
-  background: rgba(255,255,255,0.04);
-  color: #c8c8d8;
+  background: rgba(255,255,255,0.05);
+  color: var(--text-primary);
 }
-
 .sidebar-link.active {
-  background: rgba(167,139,250,0.1);
-  color: var(--accent);
-  border-left: 2px solid var(--accent);
-  padding-left: 10px;
+  color: var(--text-bright);
+  background: linear-gradient(90deg, rgba(167,139,250,0.20), rgba(167,139,250,0.04));
+}
+/* Accent rail, drawn rather than a border so it does not shift the text */
+.sidebar-link.active::before {
+  content: "";
+  position: absolute;
+  left: 0;
+  top: 18%;
+  bottom: 18%;
+  width: 2px;
+  border-radius: 0 2px 2px 0;
+  background: linear-gradient(180deg, #c4b5fd, #7c3aed);
 }
 
 .sidebar-icon {
-  font-size: 1.1rem;
+  font-size: 1.05rem;
   width: 22px;
   text-align: center;
+  opacity: 0.9;
 }
 
 /* ── Sidebar user strip ──────────────────────────────────────────────────── */
@@ -145,7 +161,7 @@
   overflow: hidden;
   text-overflow: ellipsis;
 }
-.circle-pill:hover { border-color: rgba(167,139,250,0.3); color: #a08868; }
+.circle-pill:hover { border-color: rgba(167,139,250,0.45); color: var(--accent-lavender); }
 .circle-pill.active {
   background: rgba(167,139,250,0.1);
   border-color: rgba(167,139,250,0.35);
@@ -271,6 +287,8 @@
 
 /* ── Main content area ───────────────────────────────────────────────────── */
 .app-main {
+  position: relative;
+  z-index: 1;
   flex: 1;
   min-width: 0;        /* prevent flex overflow */
   padding: 32px;
@@ -279,24 +297,29 @@
 
 /* ── Global page heading ─────────────────────────────────────────────────── */
 .page-heading {
-  font-size: 1.6rem;
-  font-weight: 700;
-  letter-spacing: -0.02em;
-  margin-bottom: 24px;
+  font-size: clamp(1.6rem, 3vw, 2.1rem);
+  font-weight: 600;
+  letter-spacing: -0.032em;
+  margin-bottom: var(--space-5);
   color: var(--text-bright);
 }
 
 /* ── Section card ────────────────────────────────────────────────────────── */
 .section-card {
-  background: var(--bg-base);
-  border: 1px solid var(--bg-elevated);
-  border-radius: 12px;
+  background: rgba(255,255,255,0.028);
+  backdrop-filter: blur(16px);
+  border: 1px solid rgba(255,255,255,0.08);
+  border-radius: var(--radius-lg);
   padding: 20px;
   margin-bottom: 24px;
 }
 
 /* ── Button variants ─────────────────────────────────────────────────────── */
 .btn-primary {
+  background: linear-gradient(135deg, #c4b5fd 0%, #a78bfa 45%, #7c3aed 100%);
+  box-shadow: 0 8px 26px -10px rgba(124,58,237,0.85);
+  color: #12081f;
+  font-weight: 600;
   background: var(--accent);
   color: var(--bg-deepest);
   border: none;
@@ -308,7 +331,7 @@
   cursor: pointer;
   transition: background 0.15s;
 }
-.btn-primary:hover { background: var(--accent-hover); }
+.btn-primary:hover { box-shadow: 0 13px 34px -10px rgba(124,58,237,1); transform: translateY(-1px); }
 
 .btn-secondary {
   background: var(--bg-raised);

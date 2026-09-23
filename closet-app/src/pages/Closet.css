@@ -3,26 +3,37 @@
   display: flex;
   align-items: center;
   flex-wrap: wrap;
-  gap: 10px;
-  margin-bottom: 20px;
+  gap: var(--space-3);
+  margin-bottom: var(--space-5);
+  padding: var(--space-3);
+  border: 1px solid rgba(255,255,255,0.08);
+  border-radius: var(--radius-lg);
+  background: rgba(255,255,255,0.028);
+  backdrop-filter: blur(16px);
 }
 
 .upload-file-label {
-  background: var(--bg-raised);
-  border: 1px dashed var(--border-strong);
-  border-radius: 8px;
-  padding: 8px 14px;
+  background: rgba(0,0,0,0.28);
+  border: 1px dashed rgba(255,255,255,0.18);
+  border-radius: var(--radius-md);
+  padding: 9px 15px;
   color: var(--text-muted);
-  font-size: 0.875rem;
+  font-size: var(--text-sm);
   cursor: pointer;
-  transition: background 0.15s;
+  transition: border-color var(--dur-base) var(--ease-out),
+              color var(--dur-base) var(--ease-out),
+              background var(--dur-base) var(--ease-out);
 }
-.upload-file-label:hover { background: var(--border); }
+.upload-file-label:hover {
+  background: rgba(0,0,0,0.4);
+  border-color: rgba(167,139,250,0.5);
+  color: var(--text-primary);
+}
 
 .closet-camera-preview {
   width: 160px;
-  border-radius: 8px;
-  border: 1px solid var(--border-strong);
+  border-radius: var(--radius-md);
+  border: 1px solid rgba(255,255,255,0.12);
 }
 
 /* ── Category tabs ──────────────────────────────────────────────────────── */
@@ -30,80 +41,56 @@
   display: flex;
   align-items: center;
   flex-wrap: wrap;
-  gap: 6px;
-  margin-bottom: 24px;
+  gap: var(--space-2);
+  margin-bottom: var(--space-5);
 }
 
 .closet-cat-tab {
-  padding: 6px 14px;
-  border-radius: 20px;
-  border: 1px solid var(--border);
-  background: transparent;
-  color: var(--text-dim);
-  font-size: 0.85rem;
+  padding: 7px 15px;
+  border-radius: var(--radius-full);
+  border: 1px solid rgba(255,255,255,0.09);
+  background: rgba(255,255,255,0.028);
+  color: var(--text-muted);
+  font-size: var(--text-sm);
+  font-weight: 500;
   cursor: pointer;
-  transition: background 0.15s, color 0.15s, border-color 0.15s;
+  backdrop-filter: blur(10px);
+  transition: background var(--dur-base) var(--ease-out),
+              color var(--dur-base) var(--ease-out),
+              border-color var(--dur-base) var(--ease-out);
 }
-.closet-cat-tab:hover { background: var(--bg-raised); color: var(--text-secondary); }
+.closet-cat-tab:hover {
+  background: rgba(255,255,255,0.07);
+  color: var(--text-primary);
+  border-color: rgba(255,255,255,0.16);
+}
 .closet-cat-tab.active {
-  background: rgba(167,139,250,0.1);
-  border-color: rgba(167,139,250,0.35);
-  color: var(--accent);
+  color: var(--text-bright);
+  border-color: rgba(196,181,253,0.45);
+  background: linear-gradient(135deg, rgba(196,181,253,0.22), rgba(124,58,237,0.3));
+  box-shadow: 0 6px 20px -8px rgba(124,58,237,0.8);
 }
 
 .closet-add-cat {
   display: flex;
   align-items: center;
-  gap: 6px;
-  margin-left: 8px;
-}
-
-/* ── Subcategory pills ──────────────────────────────────────────────────── */
-.closet-subcat-tabs {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 5px;
-  margin-bottom: 18px;
-  padding-left: 2px;
-}
-
-.closet-subcat-tab {
-  padding: 4px 12px;
-  border-radius: 20px;
-  border: 1px solid var(--bg-surface);
-  background: transparent;
-  color: var(--text-dim);
-  font-size: 0.78rem;
-  cursor: pointer;
-  transition: background 0.15s, color 0.15s, border-color 0.15s;
-  text-transform: capitalize;
-}
-.closet-subcat-tab:hover { background: var(--bg-surface); color: var(--text-secondary); }
-.closet-subcat-tab.active {
-  background: rgba(167,139,250,0.08);
-  border-color: rgba(167,139,250,0.3);
-  color: var(--accent);
-}
-
-.closet-tag-chip--subcat {
-  background: rgba(167,139,250,0.08);
-  border-color: rgba(167,139,250,0.25);
-  color: var(--accent);
-  text-transform: capitalize;
+  gap: var(--space-2);
+  margin-left: var(--space-2);
 }
 
 /* ── Category section ───────────────────────────────────────────────────── */
-.closet-category-section { margin-bottom: 32px; }
+.closet-category-section { margin-bottom: var(--space-6); }
 
 .closet-category-heading {
-  font-size: 1rem;
+  font-size: var(--text-xs);
   font-weight: 600;
-  color: var(--text-soft);
+  color: var(--text-muted);
   text-transform: uppercase;
-  letter-spacing: 0.06em;
-  margin-bottom: 14px;
-  padding-bottom: 8px;
-  border-bottom: 1px solid var(--bg-raised);
+  letter-spacing: 0.16em;
+  margin-bottom: var(--space-4);
+  padding-bottom: var(--space-3);
+  border-bottom: 1px solid transparent;
+  border-image: linear-gradient(90deg, rgba(255,255,255,0.14), transparent 65%) 1;
 }
 
 /* ── Cards grid ──────────────────────────────────────────────────────────── */

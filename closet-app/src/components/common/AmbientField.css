@@ -1,0 +1,42 @@
+.af-root {
+  position: fixed;
+  inset: 0;
+  z-index: 0;
+  pointer-events: none;
+  overflow: hidden;
+}
+.af-orb {
+  position: absolute;
+  display: block;
+  border-radius: 50%;
+  filter: blur(90px);
+}
+.af-orb--a { width: 44vw; height: 44vw; left: -8vw;  top: -10vh; background: #7c3aed; }
+.af-orb--b { width: 38vw; height: 38vw; right: -6vw; top: 8vh;   background: #0ea5e9; }
+.af-orb--c { width: 34vw; height: 34vw; left: 28vw;  top: 46vh;  background: #db2777; }
+
+.af-grid {
+  position: absolute;
+  inset: 0;
+  background-image:
+    linear-gradient(rgba(255,255,255,0.028) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(255,255,255,0.028) 1px, transparent 1px);
+  background-size: 68px 68px;
+  mask-image: radial-gradient(ellipse 80% 60% at 50% 40%, #000 30%, transparent 78%);
+}
+
+/* Marketing strength */
+.af-root--hero .af-orb--a { opacity: 0.50; }
+.af-root--hero .af-orb--b { opacity: 0.40; }
+.af-root--hero .af-orb--c { opacity: 0.32; }
+
+/* Behind real content: present, but never competing with a garment photo */
+.af-root--app .af-orb { filter: blur(120px); }
+.af-root--app .af-orb--a { opacity: 0.16; }
+.af-root--app .af-orb--b { opacity: 0.13; }
+.af-root--app .af-orb--c { opacity: 0.10; }
+.af-root--app .af-grid { opacity: 0.55; }
+
+@media (prefers-reduced-motion: reduce) {
+  .af-orb { animation: none !important; }
+}

@@ -1,5 +1,7 @@
 import { useState, useEffect } from "react";
-import { useNavigate, useLocation } from "react-router-dom";
+import { useNavigate, useLocation, Link } from "react-router-dom";
+import { motion } from "framer-motion";
+import AmbientField from "../components/common/AmbientField";
 import "./Login.css";
 
 import { API_BASE as API } from "../config";
@@ -10,7 +12,6 @@ export default function Login() {
   const [password, setPassword] = useState("");
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(false);
-  const [animStep, setAnimStep] = useState(0);
   const navigate = useNavigate();
   const location = useLocation();
 
@@ -33,13 +34,6 @@ export default function Login() {
       localStorage.removeItem("token");
     }
   }, [navigate]);
-
-  // Cycle through wardrobe emojis as ambient animation
-  const WARDOBE_EMOJIS = ["👗", "👔", "🧥", "👠", "👟", "🧣", "👜", "🕶️"];
-  useEffect(() => {
-    const t = setInterval(() => setAnimStep((s) => (s + 1) % WARDOBE_EMOJIS.length), 1400);
-    return () => clearInterval(t);
-  }, []);
 
   const handleSubmit = async (e) => {
     e.preventDefault();
@@ -75,53 +69,50 @@ export default function Login() {
     }
   };
 
+  const EASE = [0.22, 1, 0.36, 1];
+
   return (
     <div className="login-root">
-      {/* Ambient floating icons */}
-      <div className="login-bg" aria-hidden>
-        {WARDOBE_EMOJIS.map((em, i) => (
-          <span
-            key={i}
-            className="login-float-icon"
-            style={{
-              left: `${10 + i * 11}%`,
-              animationDelay: `${i * 0.7}s`,
-              opacity: animStep === i ? 1 : 0.18,
-            }}
-          >
-            {em}
-          </span>
-        ))}
-      </div>
+      <AmbientField variant="hero" />
 
-      <div className="login-card">
-        {/* Brand header */}
+      <Link to="/" className="login-back">MyCloset</Link>
+
+      <motion.div
+        className="login-card"
+        initial={{ opacity: 0, y: 22, scale: 0.97 }}
+        animate={{ opacity: 1, y: 0, scale: 1 }}
+        transition={{ duration: 0.55, ease: EASE }}
+      >
         <div className="login-brand">
-          <span className="login-brand-icon">{WARDOBE_EMOJIS[animStep]}</span>
-          <h1>MyCloset</h1>
-          <p>Your personal wardrobe AI</p>
+          <h1>{mode === "login" ? "Welcome back" : "Create your closet"}</h1>
+          <p>{mode === "login"
+            ? "Sign in to pick up where you left off."
+            : "Start with one photo and build from there."}</p>
         </div>
 
-        {/* Toggle tabs */}
-        <div className="login-tabs">
-          <button
-            className={`login-tab${mode === "login" ? " active" : ""}`}
-            onClick={() => { setMode("login"); setError(""); }}
-          >
-            Log in
-          </button>
-          <button
-            className={`login-tab${mode === "signup" ? " active" : ""}`}
-            onClick={() => { setMode("signup"); setError(""); }}
-          >
-            Sign up
-          </button>
+        <div className="login-tabs" role="tablist">
+          {["login", "signup"].map((m) => (
+            <button
+              key={m}
+              role="tab"
+              aria-selected={mode === m}
+              className={`login-tab${mode === m ? " active" : ""}`}
+              onClick={() => { setMode(m); setError(""); }}
+            >
+              {mode === m && (
+                <motion.span layoutId="login-tab-pill" className="login-tab-pill"
+                  transition={{ duration: 0.28, ease: EASE }} />
+              )}
+              <span className="login-tab-text">{m === "login" ? "Log in" : "Sign up"}</span>
+            </button>
+          ))}
         </div>
 
         <form onSubmit={handleSubmit} className="login-form">
           <div className="login-field-group">
-            <label className="login-label">Email</label>
+            <label className="login-label" htmlFor="login-email">Email</label>
             <input
+              id="login-email"
               type="email"
               className="login-input"
               placeholder="you@example.com"
@@ -133,11 +124,12 @@ export default function Login() {
           </div>
 
           <div className="login-field-group">
-            <label className="login-label">Password</label>
+            <label className="login-label" htmlFor="login-password">Password</label>
             <input
+              id="login-password"
               type="password"
               className="login-input"
-              placeholder="••••••••"
+              placeholder="Enter your password"
               value={password}
               onChange={(e) => setPassword(e.target.value)}
               required
@@ -145,13 +137,24 @@ export default function Login() {
             />
           </div>
 
-          {error && <p className="login-error">{error}</p>}
+          {error && (
+            <motion.p className="login-error" initial={{ opacity: 0, y: -4 }}
+              animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.25 }}>
+              {error}
+            </motion.p>
+          )}
 
-          <button className="login-submit" disabled={loading}>
+          <motion.button
+            className="login-submit"
+            disabled={loading}
+            whileHover={loading ? {} : { y: -2 }}
+            whileTap={loading ? {} : { scale: 0.985 }}
+            transition={{ duration: 0.18, ease: EASE }}
+          >
             {loading ? "Please wait…" : mode === "login" ? "Log in" : "Create account"}
-          </button>
+          </motion.button>
         </form>
-      </div>
+      </motion.div>
     </div>
   );
 }
