@@ -23,7 +23,7 @@ export default function ProtectedRoute({ children }) {
     if (!isTokenValid(token)) {
       // Clear stale/expired token so login page starts clean
       localStorage.removeItem("token");
-      navigate("/", { replace: true, state: { expired: true } });
+      navigate("/login", { replace: true, state: { expired: true } });
     } else {
       setChecked(true);
     }

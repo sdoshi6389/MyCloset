@@ -48,7 +48,7 @@ axios.interceptors.response.use(
         localStorage.removeItem("token");
         localStorage.removeItem("userId");
         localStorage.removeItem("userEmail");
-        window.location.replace("/?expired=1");
+        window.location.replace("/login?expired=1");
         return Promise.reject(err);
       }
     }
