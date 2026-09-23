@@ -127,9 +127,9 @@
 }
 .closet-card:hover {
   /* --card-edge is set per item from its colour */
-  border-color: color-mix(in srgb, var(--card-edge, #a78bfa) 45%, transparent);
-  transform: translateY(-3px);
-  box-shadow: var(--shadow-card);
+  border-color: color-mix(in srgb, var(--card-edge, #a78bfa) 70%, transparent);
+  box-shadow: 0 12px 40px -8px color-mix(in srgb, var(--card-edge, #a78bfa) 45%, transparent),
+              var(--shadow-card);
 }
 
 @keyframes closet-shimmer {
@@ -145,17 +145,40 @@
   cursor: zoom-in;
   background: var(--bg-page);
 }
-/* Colour wash behind the garment, keyed off the item's own colour. */
+/* Colour backdrop behind the garment, keyed off the item's own colour. */
 .closet-card-image::before {
   content: "";
   position: absolute;
   inset: 0;
   background: var(--card-wash, transparent);
-  opacity: 0.9;
   transition: opacity var(--dur-base) var(--ease-out);
   pointer-events: none;
 }
-.closet-card:hover .closet-card-image::before { opacity: 1; }
+/* Brighter gradient cross-fades in on hover rather than just changing alpha. */
+.closet-card-image::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  background: var(--card-wash-hover, transparent);
+  opacity: 0;
+  transition: opacity var(--dur-base) var(--ease-out);
+  pointer-events: none;
+}
+.closet-card:hover .closet-card-image::after { opacity: 1; }
+
+/* Colour also bleeds into the card body so the tile reads as one block. */
+.closet-card-body {
+  position: relative;
+}
+.closet-card-body::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  background: var(--card-wash, transparent);
+  opacity: 0.22;
+  pointer-events: none;
+}
+.closet-card-body > * { position: relative; z-index: 1; }
 
 .closet-card-image img:first-child {
   position: relative;

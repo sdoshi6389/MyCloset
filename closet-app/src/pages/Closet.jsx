@@ -7,7 +7,7 @@ import "./Closet.css";
 
 import { API_BASE as API, iconSrc, thumbSrc, photoSrc, fallbackToIcon } from "../config";
 import { motion } from "framer-motion";
-import { colorWash, colorEdge } from "../lib/colorFamily";
+import { colorWash, colorWashHover, colorEdge } from "../lib/colorFamily";
 
 const DEFAULT_CATEGORIES = ["Tops", "Bottoms", "Outerwear", "Innerwear", "Accessories", "Shoes"];
 
@@ -781,10 +781,15 @@ function ClosetItemCard({ item, index = 0, ownedByMe, ownerInitial, onZoom, onEd
     <motion.div
       ref={cardRef}
       className="closet-card"
-      style={{ "--card-wash": colorWash(item.color), "--card-edge": colorEdge(item.color) }}
-      initial={{ opacity: 0, y: 12 }}
-      animate={{ opacity: 1, y: 0 }}
-      transition={{ duration: 0.32, ease: [0.22, 1, 0.36, 1], delay: Math.min(index * 0.022, 0.4) }}
+      style={{
+        "--card-wash": colorWash(item.color),
+        "--card-wash-hover": colorWashHover(item.color),
+        "--card-edge": colorEdge(item.color),
+      }}
+      initial={{ opacity: 0, y: 28, scale: 0.94 }}
+      animate={{ opacity: 1, y: 0, scale: 1 }}
+      transition={{ duration: 0.62, ease: [0.22, 1, 0.36, 1], delay: Math.min(index * 0.05, 0.7) }}
+      whileHover={{ y: -8, transition: { duration: 0.22, ease: [0.22, 1, 0.36, 1] } }}
       onMouseEnter={handleMouseEnter}
       onMouseLeave={() => { setHovered(false); setHoverPos(null); }}
     >

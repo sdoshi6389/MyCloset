@@ -29,10 +29,18 @@ export function colorFamily(color) {
   return "slate";            // black, grey, white and anything unrecognised
 }
 
-/** Soft radial wash sitting behind a garment cutout. */
+/** Gradient backdrop sitting behind a garment cutout.
+ *  Strong enough to read as a colour block at a glance, still dark enough that a
+ *  black or white garment keeps its contrast against it. */
 export function colorWash(color) {
   const { a, b } = FAMILIES[colorFamily(color)];
-  return `radial-gradient(120% 100% at 50% 0%, ${a}26 0%, ${b}14 45%, transparent 75%)`;
+  return `linear-gradient(150deg, ${a}8c 0%, ${b}59 42%, ${b}1f 78%, transparent 100%)`;
+}
+
+/** Brighter variant used on hover. */
+export function colorWashHover(color) {
+  const { a, b } = FAMILIES[colorFamily(color)];
+  return `linear-gradient(150deg, ${a}b8 0%, ${b}80 42%, ${b}33 78%, transparent 100%)`;
 }
 
 /** Saturated edge used for hover borders and accents. */
