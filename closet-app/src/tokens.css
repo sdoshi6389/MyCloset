@@ -1,0 +1,73 @@
+/* Design tokens.
+ *
+ * Phase 1 is a pure extraction: every token below holds the exact value that was
+ * previously hardcoded, so the app renders identically. The point is that the
+ * palette now lives in one place -- 187 colour literals were scattered across 11
+ * stylesheets, and the same grey appeared as #2a2a35, #2a2a3a and #252538 with
+ * nothing marking them as the same intent.
+ *
+ * Phase 2 redefines these values. Nothing else should need to change.
+ */
+:root {
+  /* ---- Background ladder (darkest -> lightest) ---- */
+  --bg-void:          #06060d;
+  --bg-deepest:       #0f0f13;
+  --bg-page:          #12121a;
+  --bg-base:          #18181f;
+  --bg-surface:       #1e1e2a;
+  --bg-raised:        #22222e;
+  --bg-elevated:      #2a2a35;
+
+  /* ---- Borders ---- */
+  --border-subtle:    #2a2a35;
+  --border:           #2a2a3a;
+  --border-strong:    #3a3a50;
+
+  /* ---- Text ramp (brightest -> dimmest) ---- */
+  --text-bright:      #e8e8f0;
+  --text-primary:     #d0d0e8;
+  --text-secondary:   #c0c0d4;
+  --text-muted:       #9090b0;
+  --text-soft:        #8080a8;
+  --text-dim:         #7070a0;
+  --text-faint:       #555570;
+
+  /* ---- Accents ---- */
+  --accent:           #c4a882;   /* retiring in phase 2 */
+  --accent-hover:     #d4b890;
+  --accent-lavender:  #c9b8ff;
+  --accent-indigo:    #6c6cff;
+  --surface-violet:   #2c2040;
+
+  /* ---- Semantic ---- */
+  --danger:           #e07070;
+
+  /* ---- Type scale (defined now, applied in phase 2/3) ----
+   * Currently the app uses nine ad-hoc sizes; these five replace them. */
+  --text-xs:          0.6875rem;  /* 11px */
+  --text-sm:          0.8125rem;  /* 13px */
+  --text-base:        0.9375rem;  /* 15px */
+  --text-lg:          1.125rem;   /* 18px */
+  --text-xl:          1.5rem;     /* 24px */
+
+  /* ---- Radii (three, replacing five ad-hoc values) ---- */
+  --radius-sm:        8px;
+  --radius-md:        12px;
+  --radius-lg:        20px;
+  --radius-full:      999px;
+
+  /* ---- Spacing, 4px base ---- */
+  --space-1:          4px;
+  --space-2:          8px;
+  --space-3:          12px;
+  --space-4:          16px;
+  --space-5:          24px;
+  --space-6:          32px;
+
+  /* ---- Motion ---- */
+  --ease-out:         cubic-bezier(0.22, 1, 0.36, 1);
+  --ease-in-out:      cubic-bezier(0.65, 0, 0.35, 1);
+  --dur-fast:         140ms;
+  --dur-base:         220ms;
+  --dur-slow:         420ms;
+}

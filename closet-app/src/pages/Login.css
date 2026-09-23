@@ -36,7 +36,7 @@
 .login-card {
   position: relative;
   z-index: 10;
-  background: #18181f;
+  background: var(--bg-base);
   border: 1px solid #2e2e40;
   border-radius: 20px;
   padding: 40px 36px;
@@ -62,7 +62,7 @@
   font-size: 1.7rem;
   font-weight: 800;
   letter-spacing: -0.03em;
-  color: #c9b8ff;
+  color: var(--accent-lavender);
   margin: 0 0 4px;
 }
 
@@ -75,7 +75,7 @@
 /* ── Tabs ────────────────────────────────────────────────────────────────── */
 .login-tabs {
   display: flex;
-  background: #12121a;
+  background: var(--bg-page);
   border-radius: 10px;
   padding: 3px;
   margin-bottom: 24px;
@@ -96,8 +96,8 @@
 }
 
 .login-tab.active {
-  background: #2c2040;
-  color: #c9b8ff;
+  background: var(--surface-violet);
+  color: var(--accent-lavender);
 }
 
 /* ── Form ────────────────────────────────────────────────────────────────── */
@@ -117,10 +117,10 @@
 
 .login-input {
   width: 100%;
-  background: #12121a;
+  background: var(--bg-page);
   border: 1px solid #2a2a40;
   border-radius: 9px;
-  color: #e8e8f0;
+  color: var(--text-bright);
   padding: 11px 14px;
   font-size: 0.95rem;
   outline: none;
@@ -137,7 +137,7 @@
 .login-error {
   background: #1e1010;
   border: 1px solid #4a2020;
-  color: #e07070;
+  color: var(--danger);
   border-radius: 8px;
   padding: 9px 12px;
   font-size: 0.85rem;

@@ -1,3 +1,4 @@
+@import "./tokens.css";
 
 :root {
   font-family: 'Inter', system-ui, Avenir, Helvetica, Arial, sans-serif;
@@ -5,8 +6,8 @@
   font-weight: 400;
 
   color-scheme: dark;
-  color: #e8e8f0;
-  background-color: #0f0f13;
+  color: var(--text-bright);
+  background-color: var(--bg-deepest);
 
   font-synthesis: none;
   text-rendering: optimizeLegibility;
@@ -32,8 +33,8 @@ body {
   margin: 0;
   min-width: 320px;
   min-height: 100vh;
-  background-color: #0f0f13;
-  color: #e8e8f0;
+  background-color: var(--bg-deepest);
+  color: var(--text-bright);
 }
 
 h1 {

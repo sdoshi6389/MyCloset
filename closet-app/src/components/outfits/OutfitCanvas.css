@@ -10,7 +10,7 @@
   width: 100%;
   max-width: 480px;
   height: 720px;
-  background: radial-gradient(ellipse 58% 76% at 50% 36%, #0e0c20 0%, #06060d 100%);
+  background: radial-gradient(ellipse 58% 76% at 50% 36%, #0e0c20 0%, var(--bg-void) 100%);
   border-radius: 28px;
   border: 1px solid rgba(255, 255, 255, 0.025);
   overflow: hidden;
@@ -23,7 +23,7 @@
   max-width: 100%;
   border-radius: 0;
   border: none;
-  background: #06060d;
+  background: var(--bg-void);
 }
 
 /* ─── Body-presence aura ────────────────────────────────────────────────── */

@@ -44,7 +44,7 @@
 
 .picker-panel-close {
   background: transparent;
-  border: 1px solid #2a2a3a;
+  border: 1px solid var(--border);
   border-radius: 8px;
   color: #555;
   font-size: 0.85rem;
@@ -53,7 +53,7 @@
   transition: color 0.12s, border-color 0.12s;
   flex-shrink: 0;
 }
-.picker-panel-close:hover { color: #e07070; border-color: #e07070; }
+.picker-panel-close:hover { color: var(--danger); border-color: var(--danger); }
 
 /* ── Search ───────────────────────────────────────────────────────────────── */
 .picker-search-wrap {
@@ -66,7 +66,7 @@
   background: #18182a;
   border: 1px solid #2a2a3e;
   border-radius: 10px;
-  color: #d0d0e8;
+  color: var(--text-primary);
   font-size: 0.82rem;
   padding: 8px 12px;
   outline: none;
@@ -100,7 +100,7 @@
   white-space: nowrap;
 }
 .picker-tab:hover  { border-color: #3a3a55; color: #9090b8; }
-.picker-tab.active { background: #2c1e4a; border-color: #6a4aaa; color: #c9b8ff; }
+.picker-tab.active { background: #2c1e4a; border-color: #6a4aaa; color: var(--accent-lavender); }
 
 /* ── Item grid ────────────────────────────────────────────────────────────── */
 .picker-grid {
@@ -112,10 +112,10 @@
   padding: 8px 16px 16px;
   align-content: start;
   scrollbar-width: thin;
-  scrollbar-color: #2a2a3a transparent;
+  scrollbar-color: var(--border) transparent;
 }
 .picker-grid::-webkit-scrollbar { width: 4px; }
-.picker-grid::-webkit-scrollbar-thumb { background: #2a2a3a; border-radius: 4px; }
+.picker-grid::-webkit-scrollbar-thumb { background: var(--border); border-radius: 4px; }
 
 /* ── Each picker item ────────────────────────────────────────────────────── */
 .picker-item {

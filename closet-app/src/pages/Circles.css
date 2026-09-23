@@ -25,7 +25,7 @@
 .circles-panel-heading {
   font-size: 0.9rem;
   font-weight: 600;
-  color: #8080a8;
+  color: var(--text-soft);
   text-transform: uppercase;
   letter-spacing: 0.05em;
   margin: 0 0 14px;
@@ -41,8 +41,8 @@
   transition: background 0.15s;
   margin-bottom: 4px;
 }
-.circle-list-item:hover  { background: #22222e; }
-.circle-list-item.active { background: #2c2040; }
+.circle-list-item:hover  { background: var(--bg-raised); }
+.circle-list-item.active { background: var(--surface-violet); }
 
 .circle-list-icon { font-size: 1.3rem; }
 
@@ -51,7 +51,7 @@
   flex-direction: column;
 }
 
-.circle-list-name { font-size: 0.9rem; font-weight: 600; color: #d0d0e8; }
+.circle-list-name { font-size: 0.9rem; font-weight: 600; color: var(--text-primary); }
 .circle-list-meta { font-size: 0.75rem; color: #666; }
 
 /* ── Right detail ────────────────────────────────────────────────────────── */
@@ -73,8 +73,8 @@
   align-items: center;
   gap: 12px;
   padding: 10px;
-  background: #12121a;
-  border: 1px solid #2a2a35;
+  background: var(--bg-page);
+  border: 1px solid var(--bg-elevated);
   border-radius: 10px;
 }
 
@@ -82,8 +82,8 @@
   width: 36px;
   height: 36px;
   border-radius: 50%;
-  background: #2c2040;
-  color: #c9b8ff;
+  background: var(--surface-violet);
+  color: var(--accent-lavender);
   font-weight: 700;
   display: flex;
   align-items: center;
@@ -98,7 +98,7 @@
   flex-direction: column;
 }
 
-.member-email { font-size: 0.875rem; color: #d0d0e8; }
+.member-email { font-size: 0.875rem; color: var(--text-primary); }
 .member-role  { font-size: 0.72rem; color: #777; text-transform: capitalize; }
 
 /* ── Shared closet modal ─────────────────────────────────────────────────── */
@@ -115,7 +115,7 @@
   gap: 14px;
   margin-bottom: 20px;
   padding-bottom: 16px;
-  border-bottom: 1px solid #2a2a35;
+  border-bottom: 1px solid var(--bg-elevated);
 }
 
 .shared-closet-grid {
@@ -127,13 +127,13 @@
 }
 
 .shared-closet-card {
-  background: #12121a;
-  border: 1px solid #2a2a35;
+  background: var(--bg-page);
+  border: 1px solid var(--bg-elevated);
   border-radius: 10px;
   overflow: hidden;
   transition: border-color 0.15s;
 }
-.shared-closet-card:hover { border-color: #3a3a50; }
+.shared-closet-card:hover { border-color: var(--border-strong); }
 
 .shared-closet-card img {
   width: 100%;
@@ -152,7 +152,7 @@
 .scc-brand {
   font-size: 0.78rem;
   font-weight: 600;
-  color: #d0d0e8;
+  color: var(--text-primary);
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
@@ -160,8 +160,8 @@
 
 .scc-chip {
   font-size: 0.68rem;
-  color: #8080a8;
-  background: #22222e;
+  color: var(--text-soft);
+  background: var(--bg-raised);
   border-radius: 20px;
   padding: 2px 7px;
   display: inline-block;

@@ -174,7 +174,7 @@
 }
 .zone-swap:hover  { background: rgba(80, 50, 140, 0.85); border-color: rgba(160, 120, 255, 0.6); }
 .zone-remove {
-  color: #e07070;
+  color: var(--danger);
   border-color: rgba(200, 80, 80, 0.2);
   padding: 4px 8px;
 }

@@ -23,13 +23,13 @@
 
 /* ── Post card ───────────────────────────────────────────────────────────── */
 .post-card {
-  background: #18181f;
-  border: 1px solid #2a2a35;
+  background: var(--bg-base);
+  border: 1px solid var(--bg-elevated);
   border-radius: 14px;
   overflow: hidden;
   transition: border-color 0.15s;
 }
-.post-card:hover { border-color: #3a3a50; }
+.post-card:hover { border-color: var(--border-strong); }
 
 /* Header row */
 .post-header {
@@ -43,8 +43,8 @@
   width: 36px;
   height: 36px;
   border-radius: 50%;
-  background: #2c2040;
-  color: #c9b8ff;
+  background: var(--surface-violet);
+  color: var(--accent-lavender);
   font-weight: 700;
   display: flex;
   align-items: center;
@@ -54,7 +54,7 @@
 }
 
 .post-meta { display: flex; flex-direction: column; }
-.post-author { font-size: 0.875rem; font-weight: 600; color: #d0d0e8; }
+.post-author { font-size: 0.875rem; font-weight: 600; color: var(--text-primary); }
 .post-date   { font-size: 0.72rem; color: #666; }
 
 .post-visibility {
@@ -96,7 +96,7 @@
 
 .like-btn {
   background: transparent;
-  border: 1px solid #2a2a3a;
+  border: 1px solid var(--border);
   border-radius: 20px;
   padding: 5px 12px;
   color: #9090a8;
@@ -104,7 +104,7 @@
   cursor: pointer;
   transition: background 0.15s, color 0.15s;
 }
-.like-btn:hover { background: #22222e; }
+.like-btn:hover { background: var(--bg-raised); }
 .like-btn.liked { color: #e06060; border-color: #4a2020; }
 
 .post-outfit-link {
@@ -114,11 +114,11 @@
 
 /* Compose upload label (reuse from Closet) */
 .upload-file-label {
-  background: #22222e;
-  border: 1px dashed #3a3a50;
+  background: var(--bg-raised);
+  border: 1px dashed var(--border-strong);
   border-radius: 8px;
   padding: 8px 14px;
-  color: #9090b0;
+  color: var(--text-muted);
   font-size: 0.875rem;
   cursor: pointer;
 }

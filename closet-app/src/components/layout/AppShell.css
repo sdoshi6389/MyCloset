@@ -2,8 +2,8 @@
 .app-shell {
   display: flex;
   min-height: 100vh;
-  background: #0f0f13;
-  color: #e8e8f0;
+  background: var(--bg-deepest);
+  color: var(--text-bright);
   font-family: 'Inter', 'Segoe UI', system-ui, sans-serif;
 }
 
@@ -28,7 +28,7 @@
   font-weight: 300;
   font-style: italic;
   letter-spacing: 0.04em;
-  color: #c4a882;
+  color: var(--accent);
   padding: 0 20px 24px;
   border-bottom: 1px solid rgba(196,168,130,0.12);
   margin-bottom: 16px;
@@ -62,8 +62,8 @@
 
 .sidebar-link.active {
   background: rgba(196,168,130,0.1);
-  color: #c4a882;
-  border-left: 2px solid #c4a882;
+  color: var(--accent);
+  border-left: 2px solid var(--accent);
   padding-left: 10px;
 }
 
@@ -79,7 +79,7 @@
   align-items: center;
   gap: 8px;
   padding: 0 16px 16px;
-  border-bottom: 1px solid #2a2a35;
+  border-bottom: 1px solid var(--bg-elevated);
   margin-bottom: 8px;
 }
 
@@ -89,7 +89,7 @@
   border-radius: 50%;
   background: rgba(196,168,130,0.12);
   border: 1px solid rgba(196,168,130,0.22);
-  color: #c4a882;
+  color: var(--accent);
   font-size: 0.75rem;
   font-weight: 700;
   display: flex;
@@ -111,7 +111,7 @@
 /* ── Circle switcher ─────────────────────────────────────────────────────── */
 .circle-switcher {
   padding: 6px 14px 12px;
-  border-bottom: 1px solid #1e1e2a;
+  border-bottom: 1px solid var(--bg-surface);
   margin-bottom: 4px;
 }
 
@@ -149,7 +149,7 @@
 .circle-pill.active {
   background: rgba(196,168,130,0.1);
   border-color: rgba(196,168,130,0.35);
-  color: #c4a882;
+  color: var(--accent);
   font-weight: 600;
 }
 
@@ -166,7 +166,7 @@
   font-size: 0.8rem;
   color: #9a8868;
 }
-.circle-context-banner strong { color: #c4a882; }
+.circle-context-banner strong { color: var(--accent); }
 .circle-context-banner button {
   margin-left: auto;
   background: transparent;
@@ -178,7 +178,7 @@
   border-radius: 4px;
   transition: color 0.12s;
 }
-.circle-context-banner button:hover { color: #c4a882; }
+.circle-context-banner button:hover { color: var(--accent); }
 
 /* ── Circle owner badge (on item cards when viewing circle) ───────────────── */
 .circle-owner-badge {
@@ -190,7 +190,7 @@
   border-radius: 50%;
   background: rgba(196,168,130,0.14);
   border: 1.5px solid rgba(196,168,130,0.4);
-  color: #c4a882;
+  color: var(--accent);
   font-size: 0.62rem;
   font-weight: 700;
   display: flex;
@@ -202,7 +202,7 @@
 
 /* ── Sidebar footer / logout ─────────────────────────────────────────────── */
 .sidebar-footer {
-  border-top: 1px solid #2a2a35;
+  border-top: 1px solid var(--bg-elevated);
   padding: 12px;
   margin-top: 8px;
 }
@@ -234,8 +234,8 @@
   top: calc(100% + 4px);
   left: 0;
   right: 0;
-  background: #1e1e2a;
-  border: 1px solid #3a3a50;
+  background: var(--bg-surface);
+  border: 1px solid var(--border-strong);
   border-radius: 10px;
   z-index: 300;
   overflow: hidden;
@@ -251,14 +251,14 @@
   transition: background 0.12s;
 }
 
-.search-dropdown-item:hover { background: #2a2a3a; }
+.search-dropdown-item:hover { background: var(--border); }
 
 .sdi-avatar {
   width: 28px;
   height: 28px;
   border-radius: 50%;
-  background: #2c2040;
-  color: #c9b8ff;
+  background: var(--surface-violet);
+  color: var(--accent-lavender);
   font-size: 0.75rem;
   font-weight: 700;
   display: flex;
@@ -267,7 +267,7 @@
   flex-shrink: 0;
 }
 
-.sdi-email { font-size: 0.875rem; color: #d0d0e8; }
+.sdi-email { font-size: 0.875rem; color: var(--text-primary); }
 
 /* ── Main content area ───────────────────────────────────────────────────── */
 .app-main {
@@ -283,13 +283,13 @@
   font-weight: 700;
   letter-spacing: -0.02em;
   margin-bottom: 24px;
-  color: #e8e8f0;
+  color: var(--text-bright);
 }
 
 /* ── Section card ────────────────────────────────────────────────────────── */
 .section-card {
-  background: #18181f;
-  border: 1px solid #2a2a35;
+  background: var(--bg-base);
+  border: 1px solid var(--bg-elevated);
   border-radius: 12px;
   padding: 20px;
   margin-bottom: 24px;
@@ -297,7 +297,7 @@
 
 /* ── Button variants ─────────────────────────────────────────────────────── */
 .btn-primary {
-  background: #c4a882;
+  background: var(--accent);
   color: #0f0f14;
   border: none;
   border-radius: 8px;
@@ -308,12 +308,12 @@
   cursor: pointer;
   transition: background 0.15s;
 }
-.btn-primary:hover { background: #d4b890; }
+.btn-primary:hover { background: var(--accent-hover); }
 
 .btn-secondary {
-  background: #22222e;
-  color: #c0c0d4;
-  border: 1px solid #3a3a50;
+  background: var(--bg-raised);
+  color: var(--text-secondary);
+  border: 1px solid var(--border-strong);
   border-radius: 8px;
   padding: 8px 16px;
   font-size: 0.875rem;
@@ -347,7 +347,7 @@
 
 .modal-box {
   background: #1e1e28;
-  border: 1px solid #3a3a50;
+  border: 1px solid var(--border-strong);
   border-radius: 16px;
   padding: 28px;
   width: 100%;
@@ -360,7 +360,7 @@
   font-size: 1.1rem;
   font-weight: 600;
   margin-bottom: 20px;
-  color: #e8e8f0;
+  color: var(--text-bright);
 }
 
 /* ── Form fields ─────────────────────────────────────────────────────────── */
@@ -376,10 +376,10 @@
 
 .field-input, .field-select, .field-textarea {
   width: 100%;
-  background: #12121a;
+  background: var(--bg-page);
   border: 1px solid #2a2a40;
   border-radius: 8px;
-  color: #e8e8f0;
+  color: var(--text-bright);
   padding: 9px 12px;
   font-size: 0.9rem;
   outline: none;
