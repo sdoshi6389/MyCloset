@@ -809,17 +809,57 @@ def _filter_by_gender(results: list, gender: str | None) -> list:
 
 
 def is_index_loaded() -> bool:
+    """Whether catalog search can answer right now.
+
+    Under pgvector the index lives in Postgres, so there is nothing for the app
+    to load and readiness is just whether the RPC is reachable.
+    """
+    try:
+        import pgvector_search
+        if pgvector_search.enabled():
+            return True
+    except Exception:
+        pass
     return _MEM["index"] is not None
 
 
 def warm_index() -> bool:
-    """Load the index into memory (disk → Storage → rebuild). Safe to call from a background thread."""
+    """Load the index into memory (disk → Storage → rebuild). Safe to call from a background thread.
+
+    Under pgvector there is nothing to warm: Postgres owns the index, and loading
+    the ~0.9 GB of vectors here would defeat the point of moving it out.
+    """
+    try:
+        import pgvector_search
+        if pgvector_search.enabled():
+            print("⏩ FAISS warm skipped - catalog search is served by pgvector")
+            return True
+    except Exception:
+        pass
     return _ensure_index()
 
 
 def search_similar_products(query_vector, brand: str | None = None,
                             gender: str | None = None,
                             top_k: int = TOP_K) -> list:
+    """Nearest catalog products. Served by Postgres when USE_PGVECTOR is set.
+
+    Both backends return the same fields and put `distance` on the same squared-L2
+    scale, so callers and the scorer do not care which one answered.
+    """
+    try:
+        import pgvector_search
+        if pgvector_search.enabled():
+            return pgvector_search.search_similar_products(
+                query_vector, brand=brand, gender=gender, top_k=top_k)
+    except Exception as e:
+        print(f"pgvector path unavailable ({type(e).__name__}: {str(e)[:70]}) - using FAISS")
+    return _faiss_search_similar_products(query_vector, brand, gender, top_k)
+
+
+def _faiss_search_similar_products(query_vector, brand: str | None = None,
+                                   gender: str | None = None,
+                                   top_k: int = TOP_K) -> list:
     if not _ensure_index():
         return []
 
