@@ -56,6 +56,23 @@ def main() -> int:
     args = ap.parse_args()
 
     supa = get_supa()
+
+    # Fail fast and say what to do. Without this the run grinds through every
+    # batch, retrying each three times, before reporting the same thing 400x.
+    try:
+        supa.table("product_vectors").select("id").limit(1).execute()
+    except Exception as e:
+        if "PGRST205" in str(e) or "product_vectors" in str(e):
+            print("product_vectors does not exist yet.")
+            print("")
+            print("Run this first, in the Supabase SQL editor:")
+            print("    server/migrations/008_pgvector_search.sql")
+            print("")
+            print("  Supabase dashboard -> SQL Editor -> New query -> paste the file -> Run.")
+            print("  It creates the table, the HNSW index and match_products().")
+            return 2
+        raise
+
     # mmap keeps the 404 MB file on disk instead of in RAM
     vecs = np.load(EMBED_FILE, mmap_mode="r")
     with open(META_FILE, "rb") as f:
