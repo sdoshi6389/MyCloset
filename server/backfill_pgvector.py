@@ -25,7 +25,15 @@ from db import get_supa
 BATCH = 500          # ~500 * 512 floats of JSON per request
 
 
-def _rows(meta, vecs, start, end):
+def _rows(meta, vecs, start, end, seen):
+    """Build upsert rows, dropping keys already emitted.
+
+    The metadata holds 206,945 entries but only 191,839 distinct
+    (source, product_id, image) tuples - alo products repeat an image across
+    colour variants. Postgres rejects a whole batch with "ON CONFLICT DO UPDATE
+    command cannot affect row a second time" if one appears twice, so the
+    duplicates have to go before the request, not after.
+    """
     out = []
     for i in range(start, end):
         m = meta[i]
@@ -33,6 +41,10 @@ def _rows(meta, vecs, start, end):
         pid = m.get("id")
         if pid is None or not image:
             continue                      # cannot key it; skip
+        key = (m.get("source") or "", str(pid), image)
+        if key in seen:
+            continue
+        seen.add(key)
         out.append({
             "source":          m.get("source") or "",
             "product_id":      str(pid),
@@ -81,20 +93,38 @@ def main() -> int:
 
     total = args.limit or len(meta)
     start = 0
+
+    # Rows already loaded, keyed the same way as the unique constraint. Counting
+    # rows is not enough to resume from: duplicates mean the row count stops
+    # tracking the index into meta, so seed from the real keys instead.
+    seen: set = set()
     if args.resume:
+        page, got = 1000, 0
         try:
-            have = supa.table("product_vectors").select("id", count="exact").limit(1).execute().count or 0
-            start = min(have, total)
-            print(f"resuming: {have} rows already present")
+            while True:
+                r = (supa.table("product_vectors")
+                     .select("source, product_id, image")
+                     .range(got, got + page - 1).execute().data or [])
+                if not r:
+                    break
+                for x in r:
+                    seen.add((x.get("source") or "", str(x.get("product_id")), x.get("image") or ""))
+                got += len(r)
+                if len(r) < page:
+                    break
+                if got % 20000 == 0:
+                    print(f"  read {got} existing keys...")
+            print(f"resuming: {len(seen)} rows already loaded, will skip those")
         except Exception as e:
-            print(f"could not count existing rows ({e}); starting from 0")
+            print(f"could not read existing keys ({str(e)[:70]}); loading everything")
+            seen = set()
 
     print(f"backfilling {total - start} of {len(meta)} vectors, batches of {BATCH}")
     sent = failed = skipped = 0
     t0 = time.time()
     for lo in range(start, total, BATCH):
         hi = min(lo + BATCH, total)
-        rows = _rows(meta, vecs, lo, hi)
+        rows = _rows(meta, vecs, lo, hi, seen)
         skipped += (hi - lo) - len(rows)
         if not rows:
             continue

@@ -1,0 +1,42 @@
+-- Migration 009: index handling for bulk loading product_vectors.
+--
+-- Inserting into a table that already has an HNSW index makes Postgres update
+-- the graph on every row, and that cost grows with the graph. Loading 207k
+-- vectors that way slowed to a crawl around 60k rows. Building the index once,
+-- after the data is in, is far faster and produces a better-connected graph.
+--
+-- STEP 1 - run this BEFORE backfill_pgvector.py:
+
+DROP INDEX IF EXISTS product_vectors_embedding_hnsw;
+
+-- STEP 2 - run backfill_pgvector.py to completion (~191,839 rows).
+--
+-- STEP 3 - build the index.
+--
+-- A parallel build allocates a shared-memory segment sized from
+-- maintenance_work_mem, and a smaller Postgres instance cannot resize /dev/shm
+-- that far:
+--     53100: could not resize shared memory segment ... No space left on device
+-- Setting max_parallel_maintenance_workers = 0 builds serially using ordinary
+-- backend memory instead, which avoids the segment entirely. Slower to build,
+-- identical result.
+--
+--   SET maintenance_work_mem = '256MB';
+--   SET max_parallel_maintenance_workers = 0;
+--   CREATE INDEX product_vectors_embedding_hnsw
+--       ON product_vectors USING hnsw (embedding vector_cosine_ops)
+--       WITH (m = 16, ef_construction = 64);
+--   NOTIFY pgrst, 'reload schema';
+--
+-- If HNSW still will not build, IVFFlat needs far less memory. Slightly lower
+-- recall, much cheaper, and fine at this catalog size:
+--
+--   SET maintenance_work_mem = '256MB';
+--   SET max_parallel_maintenance_workers = 0;
+--   CREATE INDEX product_vectors_embedding_ivf
+--       ON product_vectors USING ivfflat (embedding vector_cosine_ops)
+--       WITH (lists = 450);
+--   NOTIFY pgrst, 'reload schema';
+--
+-- ivfflat only searches a few lists per query, so recall depends on probes:
+--   ALTER DATABASE postgres SET ivfflat.probes = 10;
