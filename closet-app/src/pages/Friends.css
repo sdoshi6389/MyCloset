@@ -96,7 +96,7 @@
 .friends-tab.active { background: var(--surface-violet); color: var(--accent-lavender); }
 
 .tab-count {
-  background: #22223a;
+  background: var(--bg-surface);
   border-radius: 20px;
   padding: 1px 7px;
   font-size: 0.72rem;
@@ -224,7 +224,7 @@
   width: 38px;
   height: 38px;
   border-radius: 50%;
-  background: #22223a;
+  background: var(--bg-surface);
   color: #8888c0;
   font-weight: 700;
   display: flex;
@@ -238,7 +238,7 @@
 .sr-pending {
   font-size: 0.78rem;
   color: var(--text-dim);
-  background: #22223a;
+  background: var(--bg-surface);
   border-radius: 20px;
   padding: 4px 12px;
 }

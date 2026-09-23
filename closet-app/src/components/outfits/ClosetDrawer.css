@@ -93,7 +93,7 @@
   background: transparent;
   border: 1px solid #181828;
   border-radius: 20px;
-  color: #3e3e58;
+  color: var(--border-strong);
   font-size: 0.61rem;
   padding: 3px 10px;
   cursor: pointer;

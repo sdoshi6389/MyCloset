@@ -6,6 +6,8 @@ import { useCircle } from "../context/CircleContext";
 import "./Closet.css";
 
 import { API_BASE as API, iconSrc, thumbSrc, photoSrc, fallbackToIcon } from "../config";
+import { motion } from "framer-motion";
+import { colorWash, colorEdge } from "../lib/colorFamily";
 
 const DEFAULT_CATEGORIES = ["Tops", "Bottoms", "Outerwear", "Innerwear", "Accessories", "Shoes"];
 
@@ -567,12 +569,13 @@ function Closet() {
         <section key={cat} className="closet-category-section">
           <h2 className="closet-category-heading">{cat}</h2>
           <div className="closet-grid">
-            {catItems.map((item) => {
+            {catItems.map((item, index) => {
               const ownedByMe = !item.owner_email || item.owner_email === currentEmail;
               return (
                 <ClosetItemCard
                   key={item.id}
                   item={item}
+                  index={index}
                   ownedByMe={ownedByMe}
                   ownerInitial={item.owner_initial}
                   onZoom={() => setZoomedItem(item)}
@@ -751,7 +754,7 @@ function iconFilename(iconPath) {
   return iconPath.split(/[/\\]/).pop();
 }
 
-function ClosetItemCard({ item, ownedByMe, ownerInitial, onZoom, onEdit, onDelete }) {
+function ClosetItemCard({ item, index = 0, ownedByMe, ownerInitial, onZoom, onEdit, onDelete }) {
   const [hovered, setHovered] = useState(false);
   const [hoverPos, setHoverPos] = useState(null);
   const [imgLoaded, setImgLoaded] = useState(false);
@@ -775,9 +778,13 @@ function ClosetItemCard({ item, ownedByMe, ownerInitial, onZoom, onEdit, onDelet
   };
 
   return (
-    <div
+    <motion.div
       ref={cardRef}
       className="closet-card"
+      style={{ "--card-wash": colorWash(item.color), "--card-edge": colorEdge(item.color) }}
+      initial={{ opacity: 0, y: 12 }}
+      animate={{ opacity: 1, y: 0 }}
+      transition={{ duration: 0.32, ease: [0.22, 1, 0.36, 1], delay: Math.min(index * 0.022, 0.4) }}
       onMouseEnter={handleMouseEnter}
       onMouseLeave={() => { setHovered(false); setHoverPos(null); }}
     >
@@ -823,7 +830,7 @@ function ClosetItemCard({ item, ownedByMe, ownerInitial, onZoom, onEdit, onDelet
           </div>
         )}
       </div>
-    </div>
+    </motion.div>
   );
 }
 

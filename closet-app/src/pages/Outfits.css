@@ -70,9 +70,9 @@
 }
 .wc-cancel {
   background: transparent;
-  border: 1px solid #1e1e2e;
+  border: 1px solid var(--bg-surface);
   border-radius: 6px;
-  color: #3e3e58;
+  color: var(--border-strong);
   font-size: 0.8rem;
   padding: 4px 8px;
   cursor: pointer;
@@ -136,7 +136,7 @@
 .wc-clear:hover { color: var(--danger); }
 .wc-empty-msg {
   font-size: 0.68rem;
-  color: #252538;
+  color: var(--bg-elevated);
   margin: 0;
   padding: 6px 0;
   text-align: center;
@@ -246,7 +246,7 @@
   background: transparent;
   border: none;
   font-size: 1.05rem;
-  color: #252538;
+  color: var(--bg-elevated);
   cursor: pointer;
   padding: 0;
   transition: color 0.1s, transform 0.1s;

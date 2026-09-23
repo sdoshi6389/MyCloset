@@ -11,8 +11,8 @@
 .sidebar {
   width: 210px;
   flex-shrink: 0;
-  background: #13131a;
-  border-right: 1px solid rgba(196,168,130,0.07);
+  background: var(--bg-deepest);
+  border-right: 1px solid rgba(167,139,250,0.07);
   display: flex;
   flex-direction: column;
   padding: 24px 0;
@@ -30,7 +30,7 @@
   letter-spacing: 0.04em;
   color: var(--accent);
   padding: 0 20px 24px;
-  border-bottom: 1px solid rgba(196,168,130,0.12);
+  border-bottom: 1px solid rgba(167,139,250,0.12);
   margin-bottom: 16px;
 }
 
@@ -61,7 +61,7 @@
 }
 
 .sidebar-link.active {
-  background: rgba(196,168,130,0.1);
+  background: rgba(167,139,250,0.1);
   color: var(--accent);
   border-left: 2px solid var(--accent);
   padding-left: 10px;
@@ -87,8 +87,8 @@
   width: 28px;
   height: 28px;
   border-radius: 50%;
-  background: rgba(196,168,130,0.12);
-  border: 1px solid rgba(196,168,130,0.22);
+  background: rgba(167,139,250,0.12);
+  border: 1px solid rgba(167,139,250,0.22);
   color: var(--accent);
   font-size: 0.75rem;
   font-weight: 700;
@@ -134,7 +134,7 @@
   background: transparent;
   border: 1px solid rgba(255,255,255,0.07);
   border-radius: 20px;
-  color: #4a4a68;
+  color: var(--border-strong);
   font-size: 0.68rem;
   font-weight: 500;
   padding: 3px 10px;
@@ -145,10 +145,10 @@
   overflow: hidden;
   text-overflow: ellipsis;
 }
-.circle-pill:hover { border-color: rgba(196,168,130,0.3); color: #a08868; }
+.circle-pill:hover { border-color: rgba(167,139,250,0.3); color: #a08868; }
 .circle-pill.active {
-  background: rgba(196,168,130,0.1);
-  border-color: rgba(196,168,130,0.35);
+  background: rgba(167,139,250,0.1);
+  border-color: rgba(167,139,250,0.35);
   color: var(--accent);
   font-weight: 600;
 }
@@ -158,8 +158,8 @@
   display: flex;
   align-items: center;
   gap: 10px;
-  background: rgba(196,168,130,0.06);
-  border: 1px solid rgba(196,168,130,0.15);
+  background: rgba(167,139,250,0.06);
+  border: 1px solid rgba(167,139,250,0.15);
   border-radius: 10px;
   padding: 8px 14px;
   margin-bottom: 20px;
@@ -188,8 +188,8 @@
   width: 22px;
   height: 22px;
   border-radius: 50%;
-  background: rgba(196,168,130,0.14);
-  border: 1.5px solid rgba(196,168,130,0.4);
+  background: rgba(167,139,250,0.14);
+  border: 1.5px solid rgba(167,139,250,0.4);
   color: var(--accent);
   font-size: 0.62rem;
   font-weight: 700;
@@ -298,7 +298,7 @@
 /* ── Button variants ─────────────────────────────────────────────────────── */
 .btn-primary {
   background: var(--accent);
-  color: #0f0f14;
+  color: var(--bg-deepest);
   border: none;
   border-radius: 8px;
   padding: 8px 16px;
@@ -377,7 +377,7 @@
 .field-input, .field-select, .field-textarea {
   width: 100%;
   background: var(--bg-page);
-  border: 1px solid #2a2a40;
+  border: 1px solid var(--bg-elevated);
   border-radius: 8px;
   color: var(--text-bright);
   padding: 9px 12px;

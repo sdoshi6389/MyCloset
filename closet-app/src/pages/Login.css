@@ -118,7 +118,7 @@
 .login-input {
   width: 100%;
   background: var(--bg-page);
-  border: 1px solid #2a2a40;
+  border: 1px solid var(--bg-elevated);
   border-radius: 9px;
   color: var(--text-bright);
   padding: 11px 14px;

@@ -74,7 +74,7 @@
   transition: border-color 0.15s;
 }
 .picker-search:focus { border-color: #5a3a90; }
-.picker-search::placeholder { color: #3e3e58; }
+.picker-search::placeholder { color: var(--border-strong); }
 
 /* ── Tabs ─────────────────────────────────────────────────────────────────── */
 .picker-tabs {
@@ -92,7 +92,7 @@
   background: transparent;
   border: 1px solid #222233;
   border-radius: 20px;
-  color: #555575;
+  color: var(--text-faint);
   font-size: 0.72rem;
   padding: 4px 12px;
   cursor: pointer;
@@ -165,7 +165,7 @@
 
 .picker-item-cat {
   font-size: 0.62rem;
-  color: #555575;
+  color: var(--text-faint);
   margin: 0 6px 7px;
   white-space: nowrap;
   overflow: hidden;
