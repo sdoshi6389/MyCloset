@@ -59,6 +59,7 @@ export default function Recommendations() {
   const [discover, setDiscover] = useState([]);
   const [loading, setLoading]   = useState(true);
   const [discovering, setDiscovering] = useState(true);
+  const [discoverErr, setDiscoverErr] = useState(false);
 
   const qs = coords ? `lat=${coords.lat}&lon=${coords.lon}&` : "";
 
@@ -80,8 +81,14 @@ export default function Recommendations() {
     let alive = true;
     setDiscovering(true);
     axios.get(`${API}/suggestions/discover?${qs}count=4`, { headers: auth() })
-      .then((r) => { if (alive) setDiscover(r.data.discover || []); })
-      .catch(() => { if (alive) setDiscover([]); })
+      .then((r) => {
+        if (!alive) return;
+        setDiscover(r.data.discover || []);
+        // The backend answers 200 with error:"unavailable" when catalog search
+        // cannot run, so an empty list means two different things.
+        setDiscoverErr(Boolean(r.data.error));
+      })
+      .catch(() => { if (alive) { setDiscover([]); setDiscoverErr(true); } })
       .finally(() => { if (alive) setDiscovering(false); });
     return () => { alive = false; };
   }, [qs]);
@@ -179,7 +186,9 @@ export default function Recommendations() {
             </div>
           ) : discover.length === 0 ? (
             <p className="rec-empty">
-              Save a look in the builder and suggestions to complete it will show up here.
+              {discoverErr
+                ? "Catalog search is still warming up. These will appear once it is ready."
+                : "Nothing to complete yet. Add a few more pieces to your closet and check back."}
             </p>
           ) : (
             <div className="rec-grid">

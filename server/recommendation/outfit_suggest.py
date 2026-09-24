@@ -211,13 +211,19 @@ def discover_additions(user_id: int, weather: dict | None = None,
         if len(parts) >= 2:
             base_looks.append({"name": o.get("name"), "outfit_id": o.get("id"), "parts": parts})
 
-    if not base_looks:
-        for L in suggest_outfits(user_id, weather=weather, count=count):
+    # Generated looks are always mixed in, not held back as a fallback. Saved
+    # outfits carry the strongest signal but there are rarely many of them, and
+    # a user with two saved looks should still get a full page: the generator
+    # already scores combinations against the profile, so these are "good
+    # outfits from the closet, ranked by preference" rather than filler.
+    saved_count = len(base_looks)
+    if saved_count < count:
+        for L in suggest_outfits(user_id, weather=weather, count=count - saved_count):
             parts = {}
             for slot, formatted in L["items"].items():
                 if formatted.get("id"):
                     parts[slot] = {"id": formatted["id"], **formatted}
-            if parts:
+            if len(parts) >= 2:
                 base_looks.append({"name": None, "outfit_id": None, "parts": parts})
 
     # Slots worth shopping for, in the order they tend to complete a look.
@@ -258,10 +264,15 @@ def discover_additions(user_id: int, weather: dict | None = None,
         out.append({
             "outfit_id": look["outfit_id"],
             "name": look["name"] or "Your look",
-            "base": {slot: _format_closet_item(row, user_id, {"total": 0, "breakdown": {}}, "")
-                     for slot, row in look["parts"].items() if row.get("filename")},
+            "base": {
+                slot: (_format_closet_item(row, user_id, {"total": 0, "breakdown": {}}, "")
+                       if row.get("filename") else row)
+                for slot, row in look["parts"].items()
+            },
             "additions": additions,
-            "reason": (f"Pairs with {look['name']}" if look["name"] else "Completes this look")
+            "reason": (f"Pairs with {look['name']}" if look["name"]
+                       else "A look from your closet, finished off")
                       + (f" · {weather['label']}" if weather else ""),
+            "from_saved": bool(look["outfit_id"]),
         })
     return out
