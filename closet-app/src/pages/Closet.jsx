@@ -56,6 +56,7 @@ function Closet() {
   useEffect(() => {
     return () => {
       stopBrandPoll();
+      stopEmbedPoll();
       if (videoRef.current?.srcObject) {
         videoRef.current.srcObject.getTracks().forEach((t) => t.stop());
       }
@@ -189,6 +190,43 @@ function Closet() {
     }
   };
 
+  const embedPollRef = useRef(null);
+
+  const stopEmbedPoll = () => {
+    if (embedPollRef.current) {
+      clearInterval(embedPollRef.current);
+      embedPollRef.current = null;
+    }
+  };
+
+  /* Opening Edit froze a copy of the item, so an embedding that finished after
+     the closet list loaded never reached the open modal and Find Match stayed
+     hidden until the card was closed and reopened. This refreshes just that
+     flag -- deliberately not the brand/name inputs, which the user may be
+     editing. */
+  const startEmbedPoll = (filename) => {
+    stopEmbedPoll();
+    let attempts = 0;
+    embedPollRef.current = setInterval(async () => {
+      attempts++;
+      if (attempts > 40) { stopEmbedPoll(); return; }
+      try {
+        const res = await axios.get(`${API}/get_closet_images`, { headers: authHeaders() });
+        const updated = res.data.find((i) => i.filename === filename);
+        if (!updated) return;
+        setItems((prev) => prev.map((i) => i.filename === filename ? { ...i, ...updated } : i));
+        if (updated.has_embedding) {
+          setActiveItem((prev) =>
+            prev?.filename === filename ? { ...prev, has_embedding: true } : prev
+          );
+          stopEmbedPoll();
+        }
+      } catch {
+        /* transient - keep polling until the attempt cap */
+      }
+    }, 3000);
+  };
+
   const startBrandPoll = (filename) => {
     stopBrandPoll();
     let attempts = 0;
@@ -241,6 +279,7 @@ function Closet() {
 
   const proceedToNextModal = async () => {
     stopBrandPoll();
+    stopEmbedPoll();
     if (modalQueue.length) {
       const [next, ...rest] = modalQueue;
       // Refresh the next item before showing its modal so GPT data that ran
@@ -580,7 +619,10 @@ function Closet() {
                   ownerInitial={item.owner_initial}
                   onZoom={() => setZoomedItem(item)}
                   onEdit={ownedByMe ? () => {
-                    setActiveItem(item);
+                    // Use the freshest copy from state, not the closure's snapshot
+                    const live = items.find((i) => i.id === item.id) || item;
+                    setActiveItem(live);
+                    if (!live.has_embedding) startEmbedPoll(live.filename);
                     setNameInput(item.matched_title || item.caption || "");
                     setGptBrandHint(item.brand || null);
                     setBrandInput(item.brand || item.tag_text || "");
@@ -605,7 +647,7 @@ function Closet() {
 
       {/* ── Metadata modal ──────────────────────────────────────────────────── */}
       {activeItem && !faissMatches.length && (
-        <div className="modal-overlay" onClick={() => { stopBrandPoll(); setActiveItem(null); }}>
+        <div className="modal-overlay" onClick={() => { stopBrandPoll(); stopEmbedPoll(); setActiveItem(null); }}>
           <div className="modal-box" onClick={(e) => e.stopPropagation()}>
             <h3>
               {activeItem.filename}
