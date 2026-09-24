@@ -94,6 +94,8 @@ app.register_blueprint(dressed_bp, url_prefix="/vton")
 app.register_blueprint(outfit2d_bp)
 app.register_blueprint(product_match_bp)
 app.register_blueprint(outfits_bp)     # /outfits
+from suggestions_bp import suggestions_bp
+app.register_blueprint(suggestions_bp, url_prefix="/suggestions")
 app.register_blueprint(circles_bp)     # /circles
 app.register_blueprint(feed_bp)        # /feed
 app.register_blueprint(recommend_bp)   # /recommend

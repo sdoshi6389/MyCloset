@@ -87,7 +87,12 @@ def _infer_slot(item: dict) -> str | None:
     if re.search(r"\b(bracelet|bangle|cuff|watch|wristband|wristwatch|arm candy)\b", text): return "bracelet"
     if re.search(r"\b(bag|purse|handbag|clutch|backpack|tote|satchel|crossbody|fanny pack|shoulder bag|mini bag)\b", text): return "bag"
     if re.search(r"\b(jacket|coat|blazer|puffer|windbreaker|trench|parka|overcoat|raincoat|bomber|denim jacket|leather jacket|varsity)\b", text): return "outer_top"
-    if re.search(r"\b(hoodie|zip.?up|fleece)\b", text) and "shirt" not in text: return "outer_top"
+    # Guard against bottoms: "fleece shorts" and "fleece joggers" are not
+    # outerwear, and this rule runs before the bottoms rules below.
+    if (re.search(r"\b(hoodie|zip.?up|fleece)\b", text)
+            and "shirt" not in text
+            and not re.search(r"\b(shorts?|pants?|joggers?|sweatpants?|leggings?|trousers?)\b", text)):
+        return "outer_top"
     if re.search(r"\b(bralette|sports.?bra|camisole|cami|undershirt|base.?layer|thermal|bodysuit|lingerie)\b", text): return "innerwear"
     if re.search(r"\bbra\b", text) and not re.search(r"\b(bracelet|bangle)\b", text): return "innerwear"
     if re.search(r"\btank\b", text) and re.search(r"\b(top|under|inner)\b", text): return "innerwear"
@@ -96,7 +101,9 @@ def _infer_slot(item: dict) -> str | None:
     if re.search(r"\bhoodie\b", text): return "inner_top"
     if re.search(r"\btop\b", text) and not re.search(r"(jacket|coat|outer)", text): return "inner_top"
     if re.search(r"\bshorts?\b", text): return "shorts"
-    if re.search(r"\b(pants|jeans|trousers|chinos|slacks|legging|jogger|sweatpant|cargo|denim)\b", text): return "inner_bottom"
+    if re.search(r"\b(pants?|jeans?|trousers?|chinos?|slacks|leggings?|joggers?|"
+                 r"sweatpants?|sweats|cargos?|denim|khakis?|corduroys?|culottes)\b", text):
+        return "inner_bottom"
     if re.search(r"\b(skirt|mini|midi|maxi|culottes)\b", text): return "outer_bottom"
     if re.search(r"\b(shoe|sneaker|boot|loafer|sandal|heel|flat|pump|oxford|mule|slipper|clog|kicks)\b", text): return "left_shoe"
     if re.search(r"\b(sock|stocking|tight|anklet)\b", text): return "left_sock"
@@ -104,8 +111,8 @@ def _infer_slot(item: dict) -> str | None:
     t = (item.get("type") or "").lower()
     c = (item.get("category") or "").lower()
     if "outerwear" in t or "outerwear" in c: return "outer_top"
-    if t == "top"    or c == "top":          return "inner_top"
-    if t == "bottom" or c == "bottom":       return "inner_bottom"
+    if t in ("top", "tops")       or c in ("top", "tops"):       return "inner_top"
+    if t in ("bottom", "bottoms") or c in ("bottom", "bottoms"): return "inner_bottom"
     if "shoe" in t or "footwear" in t:       return "left_shoe"
     if "hat" in t or "headwear" in t:        return "hat"
     if c == "innerwear":                     return "innerwear"

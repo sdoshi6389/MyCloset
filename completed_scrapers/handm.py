@@ -82,10 +82,25 @@ def hits_to_rows(hits, gender):
     return rows
 
 
+def goto_with_retry(page, url, attempts=4):
+    """H&M occasionally stalls a page load past 60s under load; retry with backoff
+    instead of letting one slow page kill an hours-long run."""
+    for attempt in range(1, attempts + 1):
+        try:
+            page.goto(url, timeout=60000)
+            return
+        except Exception as e:
+            if attempt == attempts:
+                raise
+            wait_s = 5 * attempt
+            p(f"  goto failed (attempt {attempt}/{attempts}): {e} — retrying in {wait_s}s")
+            page.wait_for_timeout(wait_s * 1000)
+
+
 def scrape_hub(page, hub_url):
     gender = "women" if "/women/" in hub_url else "men"
     p(f"\nHub: {hub_url} [{gender}]")
-    page.goto(hub_url, timeout=60000)
+    goto_with_retry(page, hub_url)
     page.wait_for_timeout(4000)
 
     hits, total_pages = get_page_data(page)
@@ -99,7 +114,7 @@ def scrape_hub(page, hub_url):
     total_ins = total_skip = 0
     for pg in range(1, page_limit + 1):
         if pg > 1:
-            page.goto(f"{hub_url}?page={pg}", timeout=60000)
+            goto_with_retry(page, f"{hub_url}?page={pg}")
             page.wait_for_timeout(3000)
             hits, _ = get_page_data(page)
 

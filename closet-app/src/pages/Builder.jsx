@@ -1,6 +1,7 @@
 import React, { useEffect, useState, useCallback, useMemo, useRef } from "react";
 import axios from "axios";
 import Layout from "./Layout";
+import { useLocation, useNavigate } from "react-router-dom";
 import { useCircle } from "../context/CircleContext";
 import "./Builder.css";
 
@@ -711,6 +712,46 @@ export default function Builder() {
       fetchSaved();
     } catch {}
   };
+
+  const location = useLocation();
+  const navigate = useNavigate();
+  const appliedSuggestionRef = useRef(false);
+
+  /* Arriving from Recommendations with { suggestion: { slot: itemId } }.
+     Waits for items so the ids can be resolved, and runs once -- the state is
+     cleared afterwards so a refresh does not silently re-apply it. */
+  useEffect(() => {
+    const suggestion = location.state?.suggestion;
+    if (!suggestion || appliedSuggestionRef.current || !items.length) return;
+    const next = Object.fromEntries(ZONES.map((z) => [z.id, null]));
+    let placed = 0;
+    for (const [slot, itemId] of Object.entries(suggestion)) {
+      if (!(slot in next)) continue;
+      // ids arrive as numbers from the API but can be strings in state, so
+      // compare loosely rather than silently matching nothing
+      const found = items.find((i) => String(i.id) === String(itemId));
+      if (!found) continue;
+      next[slot] = {
+        id:        found.id,
+        filename:  found.filename,
+        brand:     found.brand,
+        // items from /builder/get_closet_icons already carry absolute urls;
+        // re-deriving them from icon_path produced nothing to render
+        icon_url:  found.icon_url || null,
+        thumb_url: found.thumb_url || null,
+        image_url: found.image_url || null,
+        title:     found.matched_title || found.caption || found.type,
+        source:    "closet",
+      };
+      placed++;
+    }
+    if (placed) {
+      appliedSuggestionRef.current = true;
+      setOutfit(next);
+      setLoadedOutfitId(null);
+      navigate(".", { replace: true, state: {} });
+    }
+  }, [location.state, items, navigate]);
 
   const loadOutfit = (saved) => {
     const next = Object.fromEntries(ZONES.map((z) => [z.id, null]));

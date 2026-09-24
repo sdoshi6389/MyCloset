@@ -4,6 +4,7 @@ import { useCircle } from "../../context/CircleContext";
 
 const NAV_ITEMS = [
   { to: "/closet",   label: "Closet",  icon: "👗" },
+  { to: "/for-you",  label: "For You", icon: "🎯" },
   { to: "/outfits",  label: "Outfits", icon: "✨" },
   { to: "/circles",  label: "Circles", icon: "⭕" },
   { to: "/discover", label: "Friends", icon: "👥" },
