@@ -29,6 +29,7 @@ os.environ["KMP_DUPLICATE_LIB_OK"] = "TRUE"
 import json
 import pickle
 import threading
+import time
 import requests as _requests
 from datetime import datetime, timezone
 
@@ -317,15 +318,42 @@ def _discover_product_tables() -> list[str]:
 
 
 # ── Row count ──────────────────────────────────────────────────────────────────
-def _count_products(tables: list[str]) -> int:
-    supa  = get_supa()
-    total = 0
+def _count_products(tables: list[str]) -> int | None:
+    """Total live product rows, or None when the total could not be measured.
+
+    Exact counts are expensive, and running one per table across ~77 tables
+    reliably trips statement timeouts on a couple of the larger ones. The old
+    version swallowed those failures and added 0, so the total silently changed
+    from run to run, never matched the stored fingerprint, and the index was
+    rebuilt from scratch on every single boot -- roughly seven minutes each time,
+    locally and on every deploy.
+
+    A failed count now means "unknown", not "smaller", so the caller can keep
+    using a cache it already has rather than rebuilding on bad information.
+    """
+    supa   = get_supa()
+    total  = 0
+    failed = []
     for table in tables:
-        try:
-            res    = supa.table(table).select("*", count="exact").limit(0).execute()
-            total += res.count or 0
-        except Exception:
-            pass
+        count = None
+        for attempt in range(2):
+            try:
+                res = supa.table(table).select("*", count="exact").limit(0).execute()
+                count = res.count or 0
+                break
+            except Exception:
+                if attempt:
+                    failed.append(table)
+                else:
+                    time.sleep(0.4)      # transient timeout; one retry
+        if count is None:
+            continue
+        total += count
+
+    if failed:
+        print(f"⚠️  could not count {len(failed)} table(s): {', '.join(failed[:4])}"
+              f"{'…' if len(failed) > 4 else ''} — treating row count as unknown")
+        return None
     return total
 
 
@@ -635,14 +663,27 @@ def _ensure_index() -> bool:
         if live_count == 0:
             return False
 
+        # Count unknown: trust whatever cache exists rather than paying for a
+        # rebuild because a count query timed out.
+        if live_count is None:
+            if os.path.exists(INDEX_FILE) and os.path.exists(META_FILE):
+                print("ℹ️  row count unavailable — loading the existing index instead of rebuilding")
+                _load_from_disk()
+                return True
+            if _download_from_supabase():
+                _load_from_disk()
+                return True
+            print("⚠️  row count unavailable and no cache to fall back on — rebuilding")
+            live_count = 0
+
         # 1. Local disk cache valid?
-        if _local_cache_valid(live_count):
+        if live_count and _local_cache_valid(live_count):
             _load_from_disk()
             return True
 
         # 2. Supabase Storage has a matching build?
         db_meta = _get_faiss_meta()
-        if (db_meta and db_meta.get("row_count") == live_count
+        if (live_count and db_meta and db_meta.get("row_count") == live_count
                 and db_meta.get("status") == "ready"):
             if _download_from_supabase() and _local_cache_valid(live_count):
                 _load_from_disk()
@@ -681,6 +722,11 @@ def _maybe_rebuild() -> None:
 
     live_count   = _count_products(tables)
     stored_count = (db_meta or {}).get("row_count", -1)
+
+    # An unmeasurable count is not a reason to rebuild in the background either.
+    if live_count is None:
+        print("ℹ️  background rebuild skipped — row count unavailable")
+        return
 
     if live_count == stored_count and _local_cache_valid(live_count):
         return  # nothing changed

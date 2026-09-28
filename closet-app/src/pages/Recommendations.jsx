@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useState } from "react";
 import { useNavigate } from "react-router-dom";
-import { motion } from "framer-motion";
+import { AnimatePresence, motion } from "framer-motion";
 import axios from "axios";
 import Layout from "./Layout";
 import { API_BASE as API } from "../config";
@@ -9,6 +9,18 @@ import "./Recommendations.css";
 const EASE = [0.22, 1, 0.36, 1];
 const auth = () => ({ Authorization: `Bearer ${localStorage.getItem("token")}` });
 const LS_LOC = "rec_location";
+
+/* Painted top to bottom so a card reads as a person wearing the look rather
+   than a row of unrelated products. Widths are relative to the card. */
+const STACK = [
+  { slot: "hat",          w: 40 },
+  { slot: "necklace",     w: 30 },
+  { slot: "outer_top",    w: 92 },
+  { slot: "inner_top",    w: 78 },
+  { slot: "inner_bottom", w: 70 },
+  { slot: "outer_bottom", w: 70 },
+  { slot: "left_shoe",    w: 52 },
+];
 
 /* Location is asked for on demand rather than on load: a permission prompt the
    moment a page opens is the fastest way to get it denied for good. */
@@ -39,14 +51,86 @@ function useCoords() {
   return { coords, state, ask, clear };
 }
 
-function ItemThumb({ item, size = 74 }) {
-  const src = item?.thumb_url || item?.icon_url || item?.image_url;
-  if (!src) {
-    return <div className="rec-thumb rec-thumb--empty" style={{ width: size, height: size }} />;
-  }
+const srcOf = (item) => item?.thumb_url || item?.icon_url || item?.image_url || null;
+
+/* The outfit itself, stacked. */
+function OutfitStack({ items, accessories, showAccessories }) {
+  const shown = showAccessories ? { ...items, ...accessories } : items;
+  const rows = STACK.filter(({ slot }) => shown[slot]);
   return (
-    <img className="rec-thumb" src={src} alt={item.title || ""} loading="lazy"
-         style={{ width: size, height: size }} />
+    <div className="rec-stack">
+      {rows.map(({ slot, w }) => {
+        const item = shown[slot];
+        const src = srcOf(item);
+        return (
+          <motion.div
+            key={slot}
+            className={`rec-stack-row rec-stack-row--${slot}`}
+            style={{ width: `${w}%` }}
+            layout
+            initial={{ opacity: 0, scale: 0.9 }}
+            animate={{ opacity: 1, scale: 1 }}
+            transition={{ duration: 0.3, ease: EASE }}
+            title={item.title || slot}
+          >
+            {src
+              ? <img src={src} alt={item.title || slot} loading="lazy" decoding="async" />
+              : <div className="rec-stack-blank" />}
+          </motion.div>
+        );
+      })}
+      {/* Wrist and bag pieces sit beside the body rather than in the column. */}
+      {showAccessories && (accessories.bag || accessories.bracelet) && (
+        <div className="rec-stack-side">
+          {["bag", "bracelet"].map((slot) => accessories[slot] && (
+            <motion.img
+              key={slot}
+              src={srcOf(accessories[slot])}
+              alt={accessories[slot].title || slot}
+              title={accessories[slot].title || slot}
+              loading="lazy"
+              initial={{ opacity: 0, x: 8 }}
+              animate={{ opacity: 1, x: 0 }}
+              transition={{ duration: 0.3, ease: EASE }}
+            />
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
+
+function OutfitCard({ look, index, onOpen }) {
+  const [showAcc, setShowAcc] = useState(false);
+  const accessories = look.accessories || {};
+  const accCount = Object.keys(accessories).length;
+
+  return (
+    <motion.article
+      className="rec-card"
+      initial={{ opacity: 0, y: 18 }}
+      animate={{ opacity: 1, y: 0 }}
+      transition={{ duration: 0.45, ease: EASE, delay: Math.min(index * 0.05, 0.3) }}
+    >
+      <OutfitStack items={look.items} accessories={accessories} showAccessories={showAcc} />
+
+      <div className="rec-card-foot">
+        <p className="rec-card-reason">{look.reason}</p>
+        <div className="rec-card-actions">
+          {accCount > 0 && (
+            <button
+              className={`rec-btn${showAcc ? " rec-btn--on" : ""}`}
+              onClick={() => setShowAcc((v) => !v)}
+            >
+              {showAcc ? "Hide accessories" : `Add accessories (${accCount})`}
+            </button>
+          )}
+          <button className="rec-btn rec-btn--primary" onClick={() => onOpen(look, showAcc)}>
+            Open in builder
+          </button>
+        </div>
+      </div>
+    </motion.article>
   );
 }
 
@@ -84,7 +168,7 @@ export default function Recommendations() {
       .then((r) => {
         if (!alive) return;
         setDiscover(r.data.discover || []);
-        // The backend answers 200 with error:"unavailable" when catalog search
+        // The endpoint answers 200 with error:"unavailable" when catalog search
         // cannot run, so an empty list means two different things.
         setDiscoverErr(Boolean(r.data.error));
       })
@@ -93,9 +177,14 @@ export default function Recommendations() {
     return () => { alive = false; };
   }, [qs]);
 
-  const openInBuilder = (look) => {
+  /* Carry the accessories over only if they are actually on screen, so the
+     builder opens with the look the card is showing. */
+  const openInBuilder = (look, withAccessories) => {
+    const source = withAccessories
+      ? { ...look.items, ...(look.accessories || {}) }
+      : look.items;
     const suggestion = {};
-    for (const [slot, item] of Object.entries(look.items || {})) {
+    for (const [slot, item] of Object.entries(source || {})) {
       if (item?.id) suggestion[slot] = item.id;
     }
     navigate("/outfits", { state: { suggestion } });
@@ -136,7 +225,7 @@ export default function Recommendations() {
 
           {loading ? (
             <div className="rec-grid">
-              {[0, 1, 2].map((i) => <div key={i} className="rec-card rec-card--skeleton" />)}
+              {[0, 1, 2, 3].map((i) => <div key={i} className="rec-card rec-card--skeleton" />)}
             </div>
           ) : outfits.length === 0 ? (
             <p className="rec-empty">
@@ -145,29 +234,7 @@ export default function Recommendations() {
           ) : (
             <div className="rec-grid">
               {outfits.map((look, i) => (
-                <motion.article
-                  key={i}
-                  className="rec-card"
-                  initial={{ opacity: 0, y: 18 }}
-                  animate={{ opacity: 1, y: 0 }}
-                  transition={{ duration: 0.45, ease: EASE, delay: Math.min(i * 0.05, 0.3) }}
-                  onClick={() => openInBuilder(look)}
-                  role="button"
-                  tabIndex={0}
-                  onKeyDown={(e) => {
-                    if (e.key === "Enter" || e.key === " ") { e.preventDefault(); openInBuilder(look); }
-                  }}
-                >
-                  <div className="rec-card-items">
-                    {Object.entries(look.items).map(([slot, item]) => (
-                      <ItemThumb key={slot} item={item} />
-                    ))}
-                  </div>
-                  <div className="rec-card-foot">
-                    <p className="rec-card-reason">{look.reason}</p>
-                    <span className="rec-card-open">Open in builder</span>
-                  </div>
-                </motion.article>
+                <OutfitCard key={i} look={look} index={i} onOpen={openInBuilder} />
               ))}
             </div>
           )}
@@ -182,7 +249,7 @@ export default function Recommendations() {
 
           {discovering ? (
             <div className="rec-grid">
-              {[0, 1].map((i) => <div key={i} className="rec-card rec-card--skeleton" />)}
+              {[0, 1, 2].map((i) => <div key={i} className="rec-card rec-card--skeleton" />)}
             </div>
           ) : discover.length === 0 ? (
             <p className="rec-empty">
@@ -200,31 +267,42 @@ export default function Recommendations() {
                   animate={{ opacity: 1, y: 0 }}
                   transition={{ duration: 0.45, ease: EASE, delay: Math.min(i * 0.05, 0.3) }}
                 >
-                  <div className="rec-card-items">
-                    {Object.entries(d.base).map(([slot, item]) => (
-                      <ItemThumb key={slot} item={item} size={58} />
-                    ))}
-                    <span className="rec-plus">+</span>
-                    {d.additions.map((a, k) => (
-                      <div key={k} className="rec-add">
-                        <ItemThumb item={a.item} size={58} />
-                        <span className="rec-add-tag">{a.slot.replace(/_/g, " ")}</span>
-                      </div>
-                    ))}
+                  <OutfitStack items={d.base} accessories={{}} showAccessories={false} />
+
+                  <div className="rec-adds">
+                    <span className="rec-adds-label">Add to finish</span>
+                    <AnimatePresence>
+                      {d.additions.map((a, k) => (
+                        <motion.a
+                          key={k}
+                          className="rec-add-row"
+                          href={a.item.shop_url || undefined}
+                          target="_blank"
+                          rel="noreferrer"
+                          onClick={(e) => { if (!a.item.shop_url) e.preventDefault(); }}
+                          initial={{ opacity: 0, x: -6 }}
+                          animate={{ opacity: 1, x: 0 }}
+                          transition={{ duration: 0.3, ease: EASE, delay: 0.05 * k }}
+                        >
+                          {srcOf(a.item)
+                            ? <img src={srcOf(a.item)} alt={a.item.title || ""} loading="lazy" />
+                            : <span className="rec-add-blank" />}
+                          <span className="rec-add-text">
+                            <span className="rec-add-title">
+                              {(a.item.title || "View").slice(0, 34)}
+                            </span>
+                            <span className="rec-add-meta">
+                              {a.slot.replace(/_/g, " ")}
+                              {a.item.price ? ` · ${a.item.price}` : ""}
+                            </span>
+                          </span>
+                        </motion.a>
+                      ))}
+                    </AnimatePresence>
                   </div>
+
                   <div className="rec-card-foot">
                     <p className="rec-card-reason">{d.reason}</p>
-                    <div className="rec-add-list">
-                      {d.additions.map((a, k) => (
-                        <a key={k} className="rec-add-link"
-                           href={a.item.shop_url || undefined}
-                           target="_blank" rel="noreferrer"
-                           onClick={(e) => { if (!a.item.shop_url) e.preventDefault(); }}>
-                          {(a.item.title || "View").slice(0, 32)}
-                          {a.item.price ? ` - ${a.item.price}` : ""}
-                        </a>
-                      ))}
-                    </div>
                   </div>
                 </motion.article>
               ))}

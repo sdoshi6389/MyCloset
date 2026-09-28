@@ -7,6 +7,9 @@ Two reads:
 Both take optional lat/lon. Weather steers ranking when it is supplied and is
 simply absent when it is not, so the page works before anyone grants location.
 """
+import threading
+import time
+
 import jwt
 from flask import Blueprint, request, jsonify
 
@@ -14,6 +17,40 @@ from config import JWT_SECRET
 from weather import get_weather
 
 suggestions_bp = Blueprint("suggestions", __name__)
+
+# Assembling looks means scoring every candidate against a partial outfit, and
+# Discover adds a catalog search per look on top. None of that changes minute to
+# minute, so a short cache turns a revisit from seconds into nothing. Keyed on
+# the weather season rather than the raw temperature, since a 0.4 degree change
+# should not invalidate anything.
+_CACHE: dict[tuple, tuple[float, dict]] = {}
+_CACHE_TTL = 600
+_CACHE_LOCK = threading.Lock()
+
+
+def _cache_key(kind: str, user_id: int, weather: dict | None, **kw) -> tuple:
+    season = (weather or {}).get("season")
+    layers = (weather or {}).get("layers")
+    return (kind, user_id, season, layers, tuple(sorted(kw.items())))
+
+
+def _cache_get(key):
+    with _CACHE_LOCK:
+        hit = _CACHE.get(key)
+        if hit and time.time() - hit[0] < _CACHE_TTL:
+            return hit[1]
+        if hit:
+            _CACHE.pop(key, None)
+    return None
+
+
+def _cache_put(key, value):
+    with _CACHE_LOCK:
+        _CACHE[key] = (time.time(), value)
+        if len(_CACHE) > 256:                  # bound it; this is a dev-scale cache
+            oldest = sorted(_CACHE.items(), key=lambda kv: kv[1][0])[:64]
+            for k, _ in oldest:
+                _CACHE.pop(k, None)
 
 
 def _get_user_id(req) -> int | None:
@@ -52,10 +89,17 @@ def outfit_suggestions():
     except ValueError:
         count = 6
     w = _weather_from(request)
+    key = _cache_key("outfits", user_id, w, count=count)
+    cached = _cache_get(key)
+    if cached is not None:
+        return jsonify({**cached, "cached": True}), 200
     try:
         from recommendation.outfit_suggest import suggest_outfits
         looks = suggest_outfits(user_id, weather=w, count=count)
-        return jsonify({"weather": w, "outfits": looks}), 200
+        payload = {"weather": w, "outfits": looks}
+        if looks:
+            _cache_put(key, payload)
+        return jsonify(payload), 200
     except Exception as e:
         print(f"❌ /suggestions/outfits: {type(e).__name__}: {e}")
         return jsonify({"weather": w, "outfits": [], "error": "unavailable"}), 200
@@ -76,11 +120,18 @@ def discover():
         max_new = 2
     gender = request.args.get("gender") or None
     w = _weather_from(request)
+    key = _cache_key("discover", user_id, w, count=count, max_new=max_new, gender=gender or "")
+    cached = _cache_get(key)
+    if cached is not None:
+        return jsonify({**cached, "cached": True}), 200
     try:
         from recommendation.outfit_suggest import discover_additions
         found = discover_additions(user_id, weather=w, count=count,
                                    max_new=max_new, gender=gender)
-        return jsonify({"weather": w, "discover": found}), 200
+        payload = {"weather": w, "discover": found}
+        if found:
+            _cache_put(key, payload)
+        return jsonify(payload), 200
     except Exception as e:
         print(f"❌ /suggestions/discover: {type(e).__name__}: {e}")
         return jsonify({"weather": w, "discover": [], "error": "unavailable"}), 200

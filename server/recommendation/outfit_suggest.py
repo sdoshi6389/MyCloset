@@ -115,27 +115,29 @@ def suggest_outfits(user_id: int, weather: dict | None = None,
                 used.add(pick["id"]); chosen.append(pick)
                 parts["outer_top"] = pick; score_sum += sc; n += 1
 
-        # One accessory, if a good one exists.
-        for slot in ("hat", "bag", "necklace", "bracelet"):
+        # Accessories are collected but kept out of the outfit's own score, so a
+        # look is judged on the clothes and the extras stay optional.
+        accessories: dict[str, dict] = {}
+        for slot in ("hat", "necklace", "bag", "bracelet"):
             pool = by_slot.get(slot) or []
             if not pool:
                 continue
-            pick, sc = _best_for_slot(slot, pool, chosen, profile, weather, used,
-                                      exclude_score_below=0.45)
+            pick, _sc = _best_for_slot(slot, pool, chosen, profile, weather, used,
+                                       exclude_score_below=0.40)
             if pick:
                 pick = {**pick, "_slot": slot}
-                used.add(pick["id"]); chosen.append(pick)
-                parts[slot] = pick; score_sum += sc; n += 1
-                break
+                used.add(pick["id"])
+                accessories[slot] = pick
 
+        fmt = lambda it: _format_closet_item(it, user_id, {"total": 0, "breakdown": {}}, "")
         looks.append({
             "score": round(score_sum / max(n, 1), 4),
             "weather_fit": round(
                 sum(season_fit(p, weather) for p in parts.values()) / len(parts), 3),
-            "items": {
-                slot: _format_closet_item(it, user_id, {"total": 0, "breakdown": {}}, "")
-                for slot, it in parts.items()
-            },
+            # The outfit proper: what the card shows by default.
+            "items": {slot: fmt(it) for slot, it in parts.items()},
+            # Held back until asked for.
+            "accessories": {slot: fmt(it) for slot, it in accessories.items()},
             "reason": _reason(parts, weather),
         })
 
