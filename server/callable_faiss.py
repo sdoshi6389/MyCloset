@@ -488,7 +488,9 @@ _FETCH_FAILURES: list[str] = []
 def _fetch_all_products(tables: list[str]) -> tuple[list, list]:
     _FETCH_FAILURES.clear()
     supa = get_supa()
-    PAGE = 1000
+    PAGE = 400          # smaller pages: a 1000-row page of 512-float embeddings
+                        # is what tips these reads into a statement timeout
+    RETRIES = 3
     vecs: list[np.ndarray] = []
     meta: list[dict]       = []
 
@@ -501,11 +503,18 @@ def _fetch_all_products(tables: list[str]) -> tuple[list, list]:
         # row, so the paged fetch below selects ONLY the columns we need. SELECT *
         # pulled every big embedding/description column for every row and blew the
         # container's memory mid-fetch on large tables.
-        try:
-            probe = supa.table(table).select("*").limit(1).execute()
-        except Exception as e:
-            print(f"  ⚠️  error probing {table}: {e}")
-            _FETCH_FAILURES.append(table)
+        probe = None
+        for attempt in range(RETRIES):
+            try:
+                probe = supa.table(table).select("*").limit(1).execute()
+                break
+            except Exception as e:
+                if attempt == RETRIES - 1:
+                    print(f"  ⚠️  error probing {table} after {RETRIES} tries: {e}")
+                    _FETCH_FAILURES.append(table)
+                else:
+                    time.sleep(0.5 * (attempt + 1))
+        if probe is None:
             continue
         if not probe.data:
             print(f"    → {len(meta)} rows so far")
@@ -523,11 +532,24 @@ def _fetch_all_products(tables: list[str]) -> tuple[list, list]:
         select_cols = ",".join(cols)
 
         offset = 0
+        table_ok = True
         while True:
-            try:
-                res = supa.table(table).select(select_cols).range(offset, offset + PAGE - 1).execute()
-            except Exception as e:
-                print(f"  ⚠️  error reading {table}: {e}")
+            res = None
+            for attempt in range(RETRIES):
+                try:
+                    res = supa.table(table).select(select_cols).range(offset, offset + PAGE - 1).execute()
+                    break
+                except Exception as e:
+                    if attempt == RETRIES - 1:
+                        print(f"  ⚠️  error reading {table} at offset {offset} "
+                              f"after {RETRIES} tries: {e}")
+                    else:
+                        time.sleep(0.6 * (attempt + 1))
+            if res is None:
+                # Partial table: record it so this build is not published as
+                # complete. Breaking quietly here is what truncated the index.
+                table_ok = False
+                _FETCH_FAILURES.append(table)
                 break
             rows = res.data or []
             if not rows:
