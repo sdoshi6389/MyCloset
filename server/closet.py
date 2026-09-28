@@ -189,7 +189,9 @@ _ITEM_SELECT = (
     "id, filename, filepath, tag_text, brand, size, category, tags, "
     "matched_brand, matched_title, icon_path, caption, type, color, style, season, "
     "fabric, vibe, keywords, emoticon_path, vector_embedding, "
-    "subcategory, layering_role, occasion, formality_score"
+    "subcategory, layering_role, occasion, formality_score, "
+    # wear tracking (migration 010)
+    "wear_count, in_laundry, last_worn"
 )
 
 @closet_bp.route("/upload_closet_images", methods=["POST"])

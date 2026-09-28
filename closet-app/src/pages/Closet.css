@@ -452,3 +452,58 @@
   font-size: 0.65rem;
   color: #a0a0c8;
 }
+
+/* ── Wear tracking ───────────────────────────────────────────────────────── */
+.closet-wear-badge,
+.closet-laundry-badge {
+  position: absolute;
+  z-index: 2;
+  font-size: 0.62rem;
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  padding: 2px 7px;
+  border-radius: var(--radius-full);
+  backdrop-filter: blur(8px);
+  pointer-events: none;
+}
+
+/* Bottom-left, so it never collides with the hover actions top-right. */
+.closet-wear-badge {
+  left: var(--space-2);
+  bottom: var(--space-2);
+  color: var(--text-secondary);
+  background: rgba(8, 8, 12, 0.72);
+  border: 1px solid rgba(255,255,255,0.14);
+  font-variant-numeric: tabular-nums;
+}
+
+.closet-laundry-badge {
+  left: var(--space-2);
+  top: var(--space-2);
+  color: #bfe3ff;
+  background: rgba(14, 116, 180, 0.42);
+  border: 1px solid rgba(125, 200, 255, 0.45);
+}
+
+.closet-wear-btn {
+  background: rgba(255,255,255,0.05);
+  border: 1px solid rgba(255,255,255,0.12);
+  border-radius: var(--radius-sm);
+  padding: 4px 9px;
+  font-size: var(--text-xs);
+  color: var(--text-secondary);
+  cursor: pointer;
+  backdrop-filter: blur(8px);
+  transition: background var(--dur-fast), border-color var(--dur-fast), color var(--dur-fast);
+}
+.closet-wear-btn:hover:not(:disabled) {
+  background: rgba(167,139,250,0.16);
+  border-color: rgba(167,139,250,0.5);
+  color: var(--text-bright);
+}
+.closet-wear-btn:disabled { opacity: 0.5; cursor: default; }
+.closet-wear-btn--on {
+  color: #bfe3ff;
+  background: rgba(14, 116, 180, 0.3);
+  border-color: rgba(125, 200, 255, 0.45);
+}

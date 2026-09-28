@@ -96,6 +96,8 @@ app.register_blueprint(product_match_bp)
 app.register_blueprint(outfits_bp)     # /outfits
 from suggestions_bp import suggestions_bp
 app.register_blueprint(suggestions_bp, url_prefix="/suggestions")
+from wear_bp import wear_bp
+app.register_blueprint(wear_bp, url_prefix="/wear")
 app.register_blueprint(circles_bp)     # /circles
 app.register_blueprint(feed_bp)        # /feed
 app.register_blueprint(recommend_bp)   # /recommend

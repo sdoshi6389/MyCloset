@@ -6,6 +6,7 @@ const NAV_ITEMS = [
   { to: "/closet",   label: "Closet",  icon: "👗" },
   { to: "/for-you",  label: "For You", icon: "🎯" },
   { to: "/outfits",  label: "Outfits", icon: "✨" },
+  { to: "/week",     label: "My Week", icon: "📅" },
   { to: "/circles",  label: "Circles", icon: "⭕" },
   { to: "/discover", label: "Friends", icon: "👥" },
   { to: "/feed",     label: "Feed",    icon: "📸" },

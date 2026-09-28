@@ -148,6 +148,9 @@ def _format_closet_item(row: dict, user_id: int, scored: dict, reason: str) -> d
         "price":           None,
         "shop_url":        None,
         "source":          "closet",
+        "wear_count":      row.get("wear_count") or 0,
+        "in_laundry":      bool(row.get("in_laundry")),
+        "last_worn":       row.get("last_worn"),
         "score":           scored["total"],
         "score_breakdown": scored["breakdown"],
         "reason":          reason,
@@ -213,7 +216,8 @@ def _closet_candidates(user_id: int, slot: str, placed_ids: set[int], gender: st
     q = supa.table("closet_items").select(
         "id, filename, matched_title, caption, type, category, subcategory, "
         "color, vibe, style, season, formality_score, occasion, "
-        "vector_embedding, icon_path, brand, gender"
+        "vector_embedding, icon_path, brand, gender, "
+        "wear_count, in_laundry, last_worn"
     ).eq("user_id", user_id).in_("category", categories)
     res = q.execute()
 
@@ -237,9 +241,14 @@ def _closet_candidates(user_id: int, slot: str, placed_ids: set[int], gender: st
           f"→placed={after_placed} →gender={len(candidates)}", end="")
     if slot in _SHARED_CATEGORY_SLOTS:
         want = _SLOT_INFER_ALIAS.get(slot, slot)
-        filtered = [c for c in candidates if _infer_slot(c) == want]
-        print(f" →infer={len(filtered)}")
-        return filtered
+        candidates = [c for c in candidates if _infer_slot(c) == want]
+        print(f" →infer={len(candidates)}", end="")
+
+    in_laundry = sum(1 for c in candidates if c.get("in_laundry"))
+    if in_laundry:
+        # Sort, do not drop: the piece stays offered and the card flags it.
+        candidates.sort(key=lambda c: bool(c.get("in_laundry")))
+        print(f" →laundry={in_laundry} (ranked last)", end="")
     print()
     return candidates
 

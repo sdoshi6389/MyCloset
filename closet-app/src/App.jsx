@@ -7,6 +7,7 @@ import Login from "./pages/Login.jsx";
 import Landing from "./pages/Landing.jsx";
 import Closet from "./pages/Closet.jsx";
 import Recommendations from "./pages/Recommendations.jsx";
+import Week from "./pages/Week.jsx";
 import Feed from "./pages/Feed.jsx";
 import Friends from "./pages/Friends.jsx";
 import Builder from "./pages/Builder.jsx";
@@ -34,6 +35,7 @@ function AnimatedRoutes() {
             {/* Protected — Closet is the home after login */}
             <Route path="/closet"    element={<ProtectedRoute><Closet /></ProtectedRoute>} />
             <Route path="/for-you"   element={<ProtectedRoute><Recommendations /></ProtectedRoute>} />
+            <Route path="/week"      element={<ProtectedRoute><Week /></ProtectedRoute>} />
             <Route path="/outfits"   element={<ProtectedRoute><Builder /></ProtectedRoute>} />
             <Route path="/circles"   element={<ProtectedRoute><Circles /></ProtectedRoute>} />
             <Route path="/feed"      element={<ProtectedRoute><Feed /></ProtectedRoute>} />

@@ -7,6 +7,10 @@ import "./Closet.css";
 
 import { API_BASE as API, iconSrc, thumbSrc, photoSrc, fallbackToIcon } from "../config";
 import { motion } from "framer-motion";
+
+// ClosetItemCard is a sibling component, so the parent's authHeaders is
+// out of scope here.
+const cardAuth = () => ({ Authorization: `Bearer ${localStorage.getItem("token")}` });
 import { cardTint, cardTintHover, colorEdge } from "../lib/colorFamily";
 
 const DEFAULT_CATEGORIES = ["Tops", "Bottoms", "Outerwear", "Innerwear", "Accessories", "Shoes"];
@@ -802,6 +806,47 @@ function ClosetItemCard({ item, index = 0, ownedByMe, ownerInitial, onZoom, onEd
   const [imgLoaded, setImgLoaded] = useState(false);
   const cardRef = useRef(null);
 
+  // Wear state is echoed locally so the badge and laundry toggle react at once;
+  // the request reconciles in the background and reverts if it fails.
+  const [wearCount, setWearCount] = useState(item.wear_count || 0);
+  const [inLaundry, setInLaundry] = useState(Boolean(item.in_laundry));
+  const [wearBusy, setWearBusy]   = useState(false);
+
+  useEffect(() => { setWearCount(item.wear_count || 0); }, [item.wear_count]);
+  useEffect(() => { setInLaundry(Boolean(item.in_laundry)); }, [item.in_laundry]);
+
+  const toggleLaundry = async (e) => {
+    e.stopPropagation();
+    if (wearBusy) return;
+    const next = !inLaundry;
+    setInLaundry(next);
+    setWearBusy(true);
+    try {
+      await axios.post(`${API}/wear/item/${item.id}/laundry`,
+                       { in_laundry: next }, { headers: cardAuth() });
+    } catch {
+      setInLaundry(!next);            // put it back; nothing was saved
+    } finally {
+      setWearBusy(false);
+    }
+  };
+
+  const markWorn = async (e) => {
+    e.stopPropagation();
+    if (wearBusy) return;
+    setWearCount((c) => c + 1);
+    setWearBusy(true);
+    try {
+      const r = await axios.post(`${API}/wear/item/${item.id}/worn`, {},
+                                 { headers: cardAuth() });
+      if (typeof r.data?.wear_count === "number") setWearCount(r.data.wear_count);
+    } catch {
+      setWearCount((c) => Math.max(0, c - 1));
+    } finally {
+      setWearBusy(false);
+    }
+  };
+
   const iconUrl  = iconSrc(item.icon_path);
   const thumbUrl = thumbSrc(item.icon_path);
 
@@ -851,6 +896,15 @@ function ClosetItemCard({ item, index = 0, ownedByMe, ownerInitial, onZoom, onEd
         {!ownedByMe && ownerInitial && (
           <div className="circle-owner-badge">{ownerInitial}</div>
         )}
+        {inLaundry && (
+          <span className="closet-laundry-badge" title="In the laundry">In the wash</span>
+        )}
+        {wearCount > 0 && (
+          <span className="closet-wear-badge"
+                title={`Worn ${wearCount} time${wearCount === 1 ? "" : "s"}`}>
+            {wearCount}x
+          </span>
+        )}
       </div>
 
       <div className="closet-card-body">
@@ -870,6 +924,18 @@ function ClosetItemCard({ item, index = 0, ownedByMe, ownerInitial, onZoom, onEd
         </div>
         {ownedByMe !== false && (
           <div className="closet-card-actions">
+            <button
+              className={`closet-wear-btn${inLaundry ? " closet-wear-btn--on" : ""}`}
+              onClick={toggleLaundry}
+              disabled={wearBusy}
+              title={inLaundry ? "Take out of the laundry" : "Mark as in the laundry"}
+            >
+              {inLaundry ? "Washed" : "Laundry"}
+            </button>
+            <button className="closet-wear-btn" onClick={markWorn} disabled={wearBusy}
+                    title="Count one wear">
+              Worn
+            </button>
             <button className="btn-secondary" style={{ fontSize: "0.78rem", padding: "5px 10px" }} onClick={onEdit}>
               Edit
             </button>

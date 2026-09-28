@@ -41,8 +41,16 @@ def _closet_by_slot(user_id: int) -> dict[str, list[dict]]:
     return out
 
 
-def _blend(base: float, weather_fit: float) -> float:
-    return base * (1 - WEATHER_WEIGHT) + weather_fit * WEATHER_WEIGHT
+LAUNDRY_PENALTY = 0.55     # multiplier, not a filter
+
+
+def _blend(base: float, weather_fit: float, item: dict | None = None) -> float:
+    score = base * (1 - WEATHER_WEIGHT) + weather_fit * WEATHER_WEIGHT
+    if item is not None and item.get("in_laundry"):
+        # Heavy enough that a clean alternative almost always wins, light
+        # enough that a closet mid-wash still returns something.
+        score *= LAUNDRY_PENALTY
+    return score
 
 
 def _best_for_slot(slot: str, pool: list[dict], chosen: list[dict],
@@ -60,7 +68,7 @@ def _best_for_slot(slot: str, pool: list[dict], chosen: list[dict],
             )
         except Exception:
             continue
-        total = _blend(scored["total"], season_fit(cand, weather))
+        total = _blend(scored["total"], season_fit(cand, weather), cand)
         if total > best_score:
             best, best_score = cand, total
     if best is None or best_score < exclude_score_below:
@@ -80,7 +88,14 @@ def suggest_outfits(user_id: int, weather: dict | None = None,
     rng = random.Random(seed)
     # Seed each look with a different top so the set is varied rather than six
     # versions of the same shirt.
-    seeds = sorted(tops, key=lambda t: season_fit(t, weather), reverse=True)
+    seeds = sorted(
+        tops,
+        key=lambda t: (
+            -season_fit(t, weather),
+            bool(t.get("in_laundry")),      # clean first
+            t.get("wear_count") or 0,       # then least-worn, for variety
+        ),
+    )
     if len(seeds) > count * 2:
         head = seeds[: count]
         tail = rng.sample(seeds[count:], min(count, len(seeds) - count))
@@ -92,7 +107,7 @@ def suggest_outfits(user_id: int, weather: dict | None = None,
         top = {**top, "_slot": "inner_top"}
         chosen = [top]
         parts = {"inner_top": top}
-        score_sum = _blend(0.5, season_fit(top, weather))
+        score_sum = _blend(0.5, season_fit(top, weather), top)
         n = 1
 
         for slot in CORE_SLOTS[1:]:
@@ -129,7 +144,11 @@ def suggest_outfits(user_id: int, weather: dict | None = None,
                 used.add(pick["id"])
                 accessories[slot] = pick
 
-        fmt = lambda it: _format_closet_item(it, user_id, {"total": 0, "breakdown": {}}, "")
+        def fmt(it):
+            out = _format_closet_item(it, user_id, {"total": 0, "breakdown": {}}, "")
+            out["in_laundry"] = bool(it.get("in_laundry"))
+            out["wear_count"] = it.get("wear_count") or 0
+            return out
         looks.append({
             "score": round(score_sum / max(n, 1), 4),
             "weather_fit": round(
@@ -163,7 +182,11 @@ def _reason(parts: dict, weather: dict | None) -> str:
         lead = "From your closet"
     kinds = [p.get("subcategory") or p.get("type") or "" for p in parts.values()]
     kinds = [k for k in kinds if k][:3]
-    return f"{lead} — {', '.join(kinds)}" if kinds else lead
+    text = f"{lead} — {', '.join(kinds)}" if kinds else lead
+    washing = sum(1 for p in parts.values() if p.get("in_laundry"))
+    if washing:
+        text += f" · {washing} piece{'s' if washing > 1 else ''} may be in the wash"
+    return text
 
 
 # ── Discover: an existing look plus one or two catalog pieces ────────────────
