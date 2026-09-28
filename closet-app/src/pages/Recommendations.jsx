@@ -269,36 +269,38 @@ export default function Recommendations() {
                 >
                   <OutfitStack items={d.base} accessories={{}} showAccessories={false} />
 
+                  {/* Icons only; the detail rides in on hover so a row of
+                      cards stays scannable instead of becoming a price list. */}
                   <div className="rec-adds">
                     <span className="rec-adds-label">Add to finish</span>
-                    <AnimatePresence>
+                    <div className="rec-adds-row">
                       {d.additions.map((a, k) => (
                         <motion.a
                           key={k}
-                          className="rec-add-row"
+                          className="rec-add-chip"
                           href={a.item.shop_url || undefined}
                           target="_blank"
                           rel="noreferrer"
                           onClick={(e) => { if (!a.item.shop_url) e.preventDefault(); }}
-                          initial={{ opacity: 0, x: -6 }}
-                          animate={{ opacity: 1, x: 0 }}
+                          initial={{ opacity: 0, scale: 0.9 }}
+                          animate={{ opacity: 1, scale: 1 }}
                           transition={{ duration: 0.3, ease: EASE, delay: 0.05 * k }}
                         >
                           {srcOf(a.item)
                             ? <img src={srcOf(a.item)} alt={a.item.title || ""} loading="lazy" />
                             : <span className="rec-add-blank" />}
-                          <span className="rec-add-text">
-                            <span className="rec-add-title">
-                              {(a.item.title || "View").slice(0, 34)}
-                            </span>
-                            <span className="rec-add-meta">
+                          <span className="rec-add-slot">{a.slot.replace(/_/g, " ")}</span>
+                          <span className="rec-add-pop" role="tooltip">
+                            <span className="rec-add-pop-title">{a.item.title || "View"}</span>
+                            <span className="rec-add-pop-meta">
+                              {a.item.brand ? `${a.item.brand} · ` : ""}
                               {a.slot.replace(/_/g, " ")}
                               {a.item.price ? ` · ${a.item.price}` : ""}
                             </span>
                           </span>
                         </motion.a>
                       ))}
-                    </AnimatePresence>
+                    </div>
                   </div>
 
                   <div className="rec-card-foot">

@@ -12,6 +12,9 @@ particular jacket is a legitimate reason to ignore the forecast.
 from __future__ import annotations
 
 import random
+import threading
+import time
+from concurrent.futures import ThreadPoolExecutor
 from typing import Any
 
 from db import get_supa
@@ -76,9 +79,42 @@ def _best_for_slot(slot: str, pool: list[dict], chosen: list[dict],
     return best, best_score
 
 
+_LOOK_MEMO: dict[tuple, tuple[float, list]] = {}
+_LOOK_MEMO_TTL = 300
+_LOOK_MEMO_LOCK = threading.Lock()
+
+
+def _memo_key(user_id: int, weather: dict | None, count: int) -> tuple:
+    w = weather or {}
+    return (user_id, w.get("season"), w.get("layers"), count)
+
+
 def suggest_outfits(user_id: int, weather: dict | None = None,
                     count: int = 6, seed: int | None = None) -> list[dict[str, Any]]:
-    """Complete looks assembled from the user's closet, best first."""
+    """Complete looks assembled from the user's closet, best first.
+
+    Memoised briefly: the recommendations page asks for outfits and Discover at
+    the same moment, and Discover assembles its base looks the same way.
+    """
+    if seed is None:                      # a caller asking for a specific seed
+        key = _memo_key(user_id, weather, count)   # wants fresh randomness
+        with _LOOK_MEMO_LOCK:
+            hit = _LOOK_MEMO.get(key)
+            if hit and time.time() - hit[0] < _LOOK_MEMO_TTL:
+                return hit[1]
+        looks = _suggest_outfits_uncached(user_id, weather, count, seed)
+        if looks:
+            with _LOOK_MEMO_LOCK:
+                _LOOK_MEMO[key] = (time.time(), looks)
+                if len(_LOOK_MEMO) > 128:
+                    for k, _ in sorted(_LOOK_MEMO.items(), key=lambda kv: kv[1][0])[:32]:
+                        _LOOK_MEMO.pop(k, None)
+        return looks
+    return _suggest_outfits_uncached(user_id, weather, count, seed)
+
+
+def _suggest_outfits_uncached(user_id: int, weather: dict | None = None,
+                              count: int = 6, seed: int | None = None) -> list[dict[str, Any]]:
     profile = get_user_profile(user_id)
     by_slot = _closet_by_slot(user_id)
     tops = by_slot.get("inner_top") or []
@@ -236,11 +272,14 @@ def discover_additions(user_id: int, weather: dict | None = None,
         if len(parts) >= 2:
             base_looks.append({"name": o.get("name"), "outfit_id": o.get("id"), "parts": parts})
 
-    # Generated looks are always mixed in, not held back as a fallback. Saved
-    # outfits carry the strongest signal but there are rarely many of them, and
-    # a user with two saved looks should still get a full page: the generator
-    # already scores combinations against the profile, so these are "good
-    # outfits from the closet, ranked by preference" rather than filler.
+    # Saved looks carry the strongest signal, but a page made entirely of them is
+    # a list of things you have already worn. At most half the slots go to saved
+    # outfits so the rest can be looks the generator built, and the two are
+    # interleaved below so the section reads as a feed rather than two blocks.
+    keep_saved = max(1, count // 2)
+    if len(base_looks) > keep_saved:
+        base_looks = base_looks[:keep_saved]
+
     saved_count = len(base_looks)
     if saved_count < count:
         for L in suggest_outfits(user_id, weather=weather, count=count - saved_count):
@@ -254,12 +293,15 @@ def discover_additions(user_id: int, weather: dict | None = None,
     # Slots worth shopping for, in the order they tend to complete a look.
     WISH = ["outer_top", "left_shoe", "bag", "hat", "necklace", "bracelet"]
 
-    out = []
-    for look in base_looks[:count]:
+    # One catalog search per look, run together rather than one after another.
+    # Each is a CLIP encode plus a FAISS query -- both release the GIL, so this
+    # turns a cost that grew with the number of looks into roughly the cost of
+    # the slowest one.
+    def _fetch(look):
         have = set(look["parts"])
-        wants = [s for s in WISH if s not in have][:max_new]
+        wants = [sl for sl in WISH if sl not in have][:max_new]
         if not wants:
-            continue
+            return look, None, []
         outfit_arg = {slot: {"id": row["id"]} for slot, row in look["parts"].items()
                       if row.get("id")}
         try:
@@ -269,6 +311,18 @@ def discover_additions(user_id: int, weather: dict | None = None,
             )
         except Exception as e:
             print(f"⚠️  discover: recommendation failed: {type(e).__name__}: {e}")
+            return look, None, wants
+        return look, res, wants
+
+    todo = base_looks[:count]
+    results = []
+    if todo:
+        with ThreadPoolExecutor(max_workers=min(4, len(todo))) as ex:
+            results = list(ex.map(_fetch, todo))
+
+    out = []
+    for look, res, wants in results:
+        if res is None:
             continue
 
         additions = []
@@ -300,4 +354,14 @@ def discover_additions(user_id: int, weather: dict | None = None,
                       + (f" · {weather['label']}" if weather else ""),
             "from_saved": bool(look["outfit_id"]),
         })
-    return out
+
+    # Alternate the two kinds instead of listing all the saved ones first.
+    saved = [o for o in out if o["from_saved"]]
+    fresh = [o for o in out if not o["from_saved"]]
+    mixed = []
+    while saved or fresh:
+        if fresh:
+            mixed.append(fresh.pop(0))
+        if saved:
+            mixed.append(saved.pop(0))
+    return mixed
