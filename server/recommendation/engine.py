@@ -63,6 +63,9 @@ _SHARED_CATEGORY_SLOTS = {
 # Candidate pool size for FAISS catalog retrieval
 FAISS_POOL_K = 250
 
+# Multiplier on a closet item that is in the wash. A preference, not a filter.
+LAUNDRY_PENALTY = 0.55
+
 # _infer_slot() returns one canonical name per garment kind, so paired/duplicated
 # slots must be normalised before comparing against it or the filter drops every
 # candidate.
@@ -246,9 +249,10 @@ def _closet_candidates(user_id: int, slot: str, placed_ids: set[int], gender: st
 
     in_laundry = sum(1 for c in candidates if c.get("in_laundry"))
     if in_laundry:
-        # Sort, do not drop: the piece stays offered and the card flags it.
-        candidates.sort(key=lambda c: bool(c.get("in_laundry")))
-        print(f" →laundry={in_laundry} (ranked last)", end="")
+        # Not dropped -- the piece stays offered and carries a flag. The
+        # ranking penalty is applied to its score, since everything here is
+        # rescored and re-sorted downstream anyway.
+        print(f" →laundry={in_laundry} (penalised)", end="")
     print()
     return candidates
 
@@ -409,6 +413,10 @@ def get_recommendations(
                 )
                 reason = generate_reason(result["breakdown"], c, outfit_items, slot)
                 formatted = _format_closet_item(c, user_id, result, reason)
+                if c.get("in_laundry"):
+                    # Heavy enough that a clean alternative wins, light enough
+                    # that a wardrobe mid-wash still returns something.
+                    formatted["score"] = round(formatted["score"] * LAUNDRY_PENALTY, 4)
                 scored_list.append(formatted)
 
         else:  # catalog

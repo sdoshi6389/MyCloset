@@ -478,7 +478,15 @@ _MULTI_IMAGE_TABLES: set[str] = {"products_alo_womens", "products_alo_mens"}
 
 
 # ── Fetch + build ──────────────────────────────────────────────────────────────
+# Tables that could not be read during the last fetch. A build that skipped
+# tables is still usable in memory, but it must not be written to disk as the
+# authoritative cache -- doing so once replaced a 206,945-vector index with a
+# 106,863-vector one, and the fingerprint then claimed it was complete.
+_FETCH_FAILURES: list[str] = []
+
+
 def _fetch_all_products(tables: list[str]) -> tuple[list, list]:
+    _FETCH_FAILURES.clear()
     supa = get_supa()
     PAGE = 1000
     vecs: list[np.ndarray] = []
@@ -497,6 +505,7 @@ def _fetch_all_products(tables: list[str]) -> tuple[list, list]:
             probe = supa.table(table).select("*").limit(1).execute()
         except Exception as e:
             print(f"  ⚠️  error probing {table}: {e}")
+            _FETCH_FAILURES.append(table)
             continue
         if not probe.data:
             print(f"    → {len(meta)} rows so far")
@@ -691,6 +700,12 @@ def _ensure_index() -> bool:
 
         # 3. Full rebuild
         ok = _build_and_persist(tables, live_count)
+        if ok and _FETCH_FAILURES:
+            # Usable for this process, but not the truth: publishing it would
+            # overwrite a complete index with a smaller one.
+            print(f"⚠️  built while {len(_FETCH_FAILURES)} table(s) were unreadable "
+                  f"({', '.join(_FETCH_FAILURES[:3])}) — not publishing this build")
+            return ok
         if ok:
             _update_faiss_meta(live_count, "ready")
             threading.Thread(
