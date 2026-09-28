@@ -49,6 +49,44 @@
 /* ── Sections ─────────────────────────────────────────────────────────────── */
 .rec-section { margin-bottom: var(--space-6); }
 
+.rec-section-head {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: var(--space-4);
+}
+
+.rec-refresh {
+  flex-shrink: 0;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 1px;
+  padding: 6px 14px;
+  border-radius: var(--radius-full);
+  font-size: var(--text-xs);
+  font-weight: 600;
+  cursor: pointer;
+  color: var(--text-secondary);
+  background: rgba(255,255,255,0.04);
+  border: 1px solid rgba(255,255,255,0.1);
+  backdrop-filter: blur(10px);
+  transition: background var(--dur-fast), border-color var(--dur-fast), color var(--dur-fast);
+}
+.rec-refresh:hover:not(:disabled) {
+  background: rgba(167,139,250,0.14);
+  border-color: rgba(167,139,250,0.45);
+  color: var(--text-bright);
+}
+.rec-refresh:disabled { opacity: 0.5; cursor: default; }
+.rec-refresh-count {
+  font-size: 0.56rem;
+  font-weight: 500;
+  letter-spacing: 0.06em;
+  color: var(--text-muted);
+  font-variant-numeric: tabular-nums;
+}
+
 .rec-section-title {
   margin: 0 0 var(--space-1);
   font-size: var(--text-lg);

@@ -145,29 +145,41 @@ export default function Recommendations() {
   const [discovering, setDiscovering] = useState(true);
   const [discoverErr, setDiscoverErr] = useState(false);
 
+  // The endpoints keep a deep pool per closet and return a slice, so Refresh is
+  // a new offset rather than a regeneration -- it comes back from cache.
+  const PAGE = 4;
+  const [outfitOffset, setOutfitOffset]     = useState(0);
+  const [discoverOffset, setDiscoverOffset] = useState(0);
+  const [outfitTotal, setOutfitTotal]       = useState(0);
+  const [discoverTotal, setDiscoverTotal]   = useState(0);
+
   const qs = coords ? `lat=${coords.lat}&lon=${coords.lon}&` : "";
 
   useEffect(() => {
     let alive = true;
     setLoading(true);
-    axios.get(`${API}/suggestions/outfits?${qs}count=6`, { headers: auth() })
+    axios.get(`${API}/suggestions/outfits?${qs}count=${PAGE}&offset=${outfitOffset}`,
+              { headers: auth() })
       .then((r) => {
         if (!alive) return;
         setWeather(r.data.weather || null);
         setOutfits(r.data.outfits || []);
+        setOutfitTotal(r.data.total || 0);
       })
       .catch(() => { if (alive) setOutfits([]); })
       .finally(() => { if (alive) setLoading(false); });
     return () => { alive = false; };
-  }, [qs]);
+  }, [qs, outfitOffset]);
 
   useEffect(() => {
     let alive = true;
     setDiscovering(true);
-    axios.get(`${API}/suggestions/discover?${qs}count=4`, { headers: auth() })
+    axios.get(`${API}/suggestions/discover?${qs}count=${PAGE}&offset=${discoverOffset}`,
+              { headers: auth() })
       .then((r) => {
         if (!alive) return;
         setDiscover(r.data.discover || []);
+        setDiscoverTotal(r.data.total || 0);
         // The endpoint answers 200 with error:"unavailable" when catalog search
         // cannot run, so an empty list means two different things.
         setDiscoverErr(Boolean(r.data.error));
@@ -175,7 +187,7 @@ export default function Recommendations() {
       .catch(() => { if (alive) { setDiscover([]); setDiscoverErr(true); } })
       .finally(() => { if (alive) setDiscovering(false); });
     return () => { alive = false; };
-  }, [qs]);
+  }, [qs, discoverOffset]);
 
   /* Carry the accessories over only if they are actually on screen, so the
      builder opens with the look the card is showing. */
@@ -218,10 +230,24 @@ export default function Recommendations() {
 
         {/* From your closet */}
         <section className="rec-section">
-          <h2 className="rec-section-title">From your closet</h2>
-          <p className="rec-section-sub">
-            Complete looks built from pieces you already own{weatherNote}.
-          </p>
+          <div className="rec-section-head">
+            <div>
+              <h2 className="rec-section-title">From your closet</h2>
+              <p className="rec-section-sub">
+                Complete looks built from pieces you already own{weatherNote}.
+              </p>
+            </div>
+            {outfitTotal > PAGE && (
+              <button className="rec-refresh"
+                      onClick={() => setOutfitOffset((o) => o + PAGE)}
+                      disabled={loading}>
+                Refresh
+                <span className="rec-refresh-count">
+                  {(outfitOffset % outfitTotal) + 1}-{Math.min((outfitOffset % outfitTotal) + PAGE, outfitTotal)} of {outfitTotal}
+                </span>
+              </button>
+            )}
+          </div>
 
           {loading ? (
             <div className="rec-grid">
@@ -242,10 +268,24 @@ export default function Recommendations() {
 
         {/* Discover */}
         <section className="rec-section">
-          <h2 className="rec-section-title">Discover</h2>
-          <p className="rec-section-sub">
-            Your looks, with one or two pieces from the catalog that would finish them.
-          </p>
+          <div className="rec-section-head">
+            <div>
+              <h2 className="rec-section-title">Discover</h2>
+              <p className="rec-section-sub">
+                Your looks, with one or two pieces from the catalog that would finish them.
+              </p>
+            </div>
+            {discoverTotal > PAGE && (
+              <button className="rec-refresh"
+                      onClick={() => setDiscoverOffset((o) => o + PAGE)}
+                      disabled={discovering}>
+                Refresh
+                <span className="rec-refresh-count">
+                  {(discoverOffset % discoverTotal) + 1}-{Math.min((discoverOffset % discoverTotal) + PAGE, discoverTotal)} of {discoverTotal}
+                </span>
+              </button>
+            )}
+          </div>
 
           {discovering ? (
             <div className="rec-grid">

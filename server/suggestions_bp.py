@@ -28,10 +28,24 @@ _CACHE_TTL = 600
 _CACHE_LOCK = threading.Lock()
 
 
+# One pool per closet, sliced to whatever the caller asked for. Keying on the
+# requested count instead meant a precomputed pool of 12 was a miss for a page
+# asking for 6, and every refresh was a fresh cache entry.
+POOL_SIZE = 12
+
+
 def _cache_key(kind: str, user_id: int, weather: dict | None, **kw) -> tuple:
     season = (weather or {}).get("season")
     layers = (weather or {}).get("layers")
     return (kind, user_id, season, layers, tuple(sorted(kw.items())))
+
+
+def _slice(pool: list, count: int, offset: int) -> list:
+    """Wrap around the pool so Refresh keeps returning something."""
+    if not pool:
+        return []
+    n = len(pool)
+    return [pool[(offset + i) % n] for i in range(min(count, n))]
 
 
 def _cache_get(key):
@@ -88,21 +102,31 @@ def outfit_suggestions():
         count = min(int(request.args.get("count", 6)), 12)
     except ValueError:
         count = 6
-    w = _weather_from(request)
-    key = _cache_key("outfits", user_id, w, count=count)
-    cached = _cache_get(key)
-    if cached is not None:
-        return jsonify({**cached, "cached": True}), 200
     try:
-        from recommendation.outfit_suggest import suggest_outfits
-        looks = suggest_outfits(user_id, weather=w, count=count)
-        payload = {"weather": w, "outfits": looks}
-        if looks:
-            _cache_put(key, payload)
-        return jsonify(payload), 200
+        offset = max(0, int(request.args.get("offset", 0)))
+    except ValueError:
+        offset = 0
+
+    w = _weather_from(request)
+    key = _cache_key("outfits", user_id, w)
+    pool = _cache_get(key)
+    was_cached = pool is not None
+    try:
+        if pool is None:
+            from recommendation.outfit_suggest import suggest_outfits
+            pool = suggest_outfits(user_id, weather=w, count=POOL_SIZE)
+            if pool:
+                _cache_put(key, pool)
+        return jsonify({
+            "weather": w,
+            "outfits": _slice(pool or [], count, offset),
+            "total": len(pool or []),
+            "offset": offset,
+            "cached": was_cached,
+        }), 200
     except Exception as e:
         print(f"❌ /suggestions/outfits: {type(e).__name__}: {e}")
-        return jsonify({"weather": w, "outfits": [], "error": "unavailable"}), 200
+        return jsonify({"weather": w, "outfits": [], "total": 0, "error": "unavailable"}), 200
 
 
 @suggestions_bp.route("/discover", methods=["GET"])
@@ -119,19 +143,29 @@ def discover():
     except ValueError:
         max_new = 2
     gender = request.args.get("gender") or None
-    w = _weather_from(request)
-    key = _cache_key("discover", user_id, w, count=count, max_new=max_new, gender=gender or "")
-    cached = _cache_get(key)
-    if cached is not None:
-        return jsonify({**cached, "cached": True}), 200
     try:
-        from recommendation.outfit_suggest import discover_additions
-        found = discover_additions(user_id, weather=w, count=count,
-                                   max_new=max_new, gender=gender)
-        payload = {"weather": w, "discover": found}
-        if found:
-            _cache_put(key, payload)
-        return jsonify(payload), 200
+        offset = max(0, int(request.args.get("offset", 0)))
+    except ValueError:
+        offset = 0
+
+    w = _weather_from(request)
+    key = _cache_key("discover", user_id, w, max_new=max_new, gender=gender or "")
+    pool = _cache_get(key)
+    was_cached = pool is not None
+    try:
+        if pool is None:
+            from recommendation.outfit_suggest import discover_additions
+            pool = discover_additions(user_id, weather=w, count=POOL_SIZE,
+                                      max_new=max_new, gender=gender)
+            if pool:
+                _cache_put(key, pool)
+        return jsonify({
+            "weather": w,
+            "discover": _slice(pool or [], count, offset),
+            "total": len(pool or []),
+            "offset": offset,
+            "cached": was_cached,
+        }), 200
     except Exception as e:
         print(f"❌ /suggestions/discover: {type(e).__name__}: {e}")
-        return jsonify({"weather": w, "discover": [], "error": "unavailable"}), 200
+        return jsonify({"weather": w, "discover": [], "total": 0, "error": "unavailable"}), 200

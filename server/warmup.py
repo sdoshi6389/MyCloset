@@ -13,6 +13,9 @@ import os
 import threading
 import time
 
+# How many closets to prepare ahead of anyone asking.
+PRECOMPUTE_USERS = 3
+
 _started = False
 _lock = threading.Lock()
 
@@ -32,6 +35,57 @@ def _run() -> None:
         print(f"🔥 CLIP text encoder warm in {time.time() - t1:.1f}s")
     except Exception as e:
         print(f"⚠️  CLIP warmup failed: {e}")
+
+    _precompute_suggestions()
+
+
+def _precompute_suggestions() -> None:
+    """Build the recommendations for recently active closets ahead of time.
+
+    Warming FAISS and CLIP only means the models are loaded; the first person to
+    open the page still pays for assembling looks and running a catalog search
+    per look. Doing it here, while nobody is waiting, means the page is served
+    from cache instead. Failures are ignored -- this is an optimisation, and the
+    endpoints still work without it.
+    """
+    t = time.time()
+    try:
+        from db import get_supa
+        from recommendation.outfit_suggest import suggest_outfits, discover_additions
+
+        rows = (get_supa().table("closet_items")
+                .select("user_id")
+                .order("uploaded_at", desc=True)
+                .limit(400).execute().data) or []
+        seen, users = set(), []
+        for r in rows:                       # most recently active first
+            uid = r.get("user_id")
+            if uid and uid not in seen:
+                seen.add(uid)
+                users.append(uid)
+            if len(users) >= PRECOMPUTE_USERS:
+                break
+
+        # Fill the same cache the endpoints read, under the same keys, or the
+        # work is done twice and the page still waits.
+        from suggestions_bp import _cache_key, _cache_put, POOL_SIZE
+        for uid in users:
+            try:
+                looks = suggest_outfits(uid, weather=None, count=POOL_SIZE)
+                if looks:
+                    _cache_put(_cache_key("outfits", uid, None), looks)
+                found = discover_additions(uid, weather=None, count=POOL_SIZE,
+                                           max_new=2, gender=None)
+                if found:
+                    _cache_put(_cache_key("discover", uid, None,
+                                          max_new=2, gender=""), found)
+            except Exception as e:
+                print(f"⚠️  precompute failed for user {uid}: {type(e).__name__}: {e}")
+        if users:
+            print(f"🔥 suggestions precomputed for {len(users)} closet(s) "
+                  f"in {time.time() - t:.1f}s")
+    except Exception as e:
+        print(f"⚠️  suggestion precompute skipped: {type(e).__name__}: {e}")
 
 
 def kick() -> None:
