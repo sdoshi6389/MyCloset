@@ -58,9 +58,16 @@ def _blend(base: float, weather_fit: float, item: dict | None = None) -> float:
 
 def _best_for_slot(slot: str, pool: list[dict], chosen: list[dict],
                    profile: dict, weather: dict | None,
-                   used: set[int], exclude_score_below: float = 0.0):
-    """Highest-scoring unused item for a slot, given what is already chosen."""
-    best, best_score = None, -1.0
+                   used: set[int], exclude_score_below: float = 0.0,
+                   variant: int = 0):
+    """Best unused item for a slot, or the variant-th best.
+
+    Always taking the single top scorer made the whole thing deterministic: a
+    given top produced exactly one outfit, so asking for more looks returned the
+    same ones. Stepping down the ranking gives genuinely different combinations
+    that are still the good end of the list.
+    """
+    ranked: list[tuple[float, dict]] = []
     for cand in pool:
         if cand["id"] in used:
             continue
@@ -71,10 +78,16 @@ def _best_for_slot(slot: str, pool: list[dict], chosen: list[dict],
             )
         except Exception:
             continue
-        total = _blend(scored["total"], season_fit(cand, weather), cand)
-        if total > best_score:
-            best, best_score = cand, total
-    if best is None or best_score < exclude_score_below:
+        ranked.append((_blend(scored["total"], season_fit(cand, weather), cand), cand))
+
+    if not ranked:
+        return None, 0.0
+    ranked.sort(key=lambda r: -r[0])
+    # Stay near the top: wrap within the best few rather than reaching down into
+    # things that genuinely do not go together.
+    idx = variant % min(len(ranked), 3) if variant else 0
+    best_score, best = ranked[idx]
+    if best_score < exclude_score_below:
         return None, 0.0
     return best, best_score
 
@@ -84,25 +97,26 @@ _LOOK_MEMO_TTL = 300
 _LOOK_MEMO_LOCK = threading.Lock()
 
 
-def _memo_key(user_id: int, weather: dict | None, count: int) -> tuple:
+def _memo_key(user_id: int, weather: dict | None, count: int, variant: int = 0) -> tuple:
     w = weather or {}
-    return (user_id, w.get("season"), w.get("layers"), count)
+    return (user_id, w.get("season"), w.get("layers"), count, variant)
 
 
 def suggest_outfits(user_id: int, weather: dict | None = None,
-                    count: int = 6, seed: int | None = None) -> list[dict[str, Any]]:
+                    count: int = 6, seed: int | None = None,
+                    variant: int = 0) -> list[dict[str, Any]]:
     """Complete looks assembled from the user's closet, best first.
 
     Memoised briefly: the recommendations page asks for outfits and Discover at
     the same moment, and Discover assembles its base looks the same way.
     """
     if seed is None:                      # a caller asking for a specific seed
-        key = _memo_key(user_id, weather, count)   # wants fresh randomness
+        key = _memo_key(user_id, weather, count, variant)  # wants fresh randomness
         with _LOOK_MEMO_LOCK:
             hit = _LOOK_MEMO.get(key)
             if hit and time.time() - hit[0] < _LOOK_MEMO_TTL:
                 return hit[1]
-        looks = _suggest_outfits_uncached(user_id, weather, count, seed)
+        looks = _suggest_outfits_uncached(user_id, weather, count, seed, variant)
         if looks:
             with _LOOK_MEMO_LOCK:
                 _LOOK_MEMO[key] = (time.time(), looks)
@@ -110,11 +124,12 @@ def suggest_outfits(user_id: int, weather: dict | None = None,
                     for k, _ in sorted(_LOOK_MEMO.items(), key=lambda kv: kv[1][0])[:32]:
                         _LOOK_MEMO.pop(k, None)
         return looks
-    return _suggest_outfits_uncached(user_id, weather, count, seed)
+    return _suggest_outfits_uncached(user_id, weather, count, seed, variant)
 
 
 def _suggest_outfits_uncached(user_id: int, weather: dict | None = None,
-                              count: int = 6, seed: int | None = None) -> list[dict[str, Any]]:
+                              count: int = 6, seed: int | None = None,
+                              variant: int = 0) -> list[dict[str, Any]]:
     profile = get_user_profile(user_id)
     by_slot = _closet_by_slot(user_id)
     tops = by_slot.get("inner_top") or []
@@ -137,6 +152,10 @@ def _suggest_outfits_uncached(user_id: int, weather: dict | None = None,
         tail = rng.sample(seeds[count:], min(count, len(seeds) - count))
         seeds = head + tail
 
+    if variant and seeds:
+        shift = (variant * max(1, len(seeds) // 4)) % len(seeds)
+        seeds = seeds[shift:] + seeds[:shift]
+
     looks = []
     for top in seeds[: count * 2]:
         used = {top["id"]}
@@ -148,7 +167,7 @@ def _suggest_outfits_uncached(user_id: int, weather: dict | None = None,
 
         for slot in CORE_SLOTS[1:]:
             pick, sc = _best_for_slot(slot, by_slot.get(slot, []), chosen,
-                                      profile, weather, used)
+                                      profile, weather, used, variant=variant)
             if pick:
                 pick = {**pick, "_slot": slot}
                 used.add(pick["id"]); chosen.append(pick)
@@ -160,7 +179,7 @@ def _suggest_outfits_uncached(user_id: int, weather: dict | None = None,
         # Outerwear only when the temperature actually calls for a layer.
         if weather and weather.get("layers", 1) >= 2:
             pick, sc = _best_for_slot("outer_top", by_slot.get("outer_top", []),
-                                      chosen, profile, weather, used)
+                                      chosen, profile, weather, used, variant=variant)
             if pick:
                 pick = {**pick, "_slot": "outer_top"}
                 used.add(pick["id"]); chosen.append(pick)
@@ -174,7 +193,7 @@ def _suggest_outfits_uncached(user_id: int, weather: dict | None = None,
             if not pool:
                 continue
             pick, _sc = _best_for_slot(slot, pool, chosen, profile, weather, used,
-                                       exclude_score_below=0.40)
+                                       exclude_score_below=0.40, variant=variant)
             if pick:
                 pick = {**pick, "_slot": slot}
                 used.add(pick["id"])
@@ -228,7 +247,8 @@ def _reason(parts: dict, weather: dict | None) -> str:
 # ── Discover: an existing look plus one or two catalog pieces ────────────────
 def discover_additions(user_id: int, weather: dict | None = None,
                        count: int = 6, max_new: int = 2,
-                       gender: str | None = None) -> list[dict[str, Any]]:
+                       gender: str | None = None,
+                       variant: int = 0) -> list[dict[str, Any]]:
     """Saved outfits with catalog pieces that would complete them.
 
     Works from saved looks first, since those are outfits the user actually
@@ -282,7 +302,8 @@ def discover_additions(user_id: int, weather: dict | None = None,
 
     saved_count = len(base_looks)
     if saved_count < count:
-        for L in suggest_outfits(user_id, weather=weather, count=count - saved_count):
+        for L in suggest_outfits(user_id, weather=weather,
+                                 count=count - saved_count, variant=variant):
             parts = {}
             for slot, formatted in L["items"].items():
                 if formatted.get("id"):

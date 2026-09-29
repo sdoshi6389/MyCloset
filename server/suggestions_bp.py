@@ -106,15 +106,19 @@ def outfit_suggestions():
         offset = max(0, int(request.args.get("offset", 0)))
     except ValueError:
         offset = 0
+    try:
+        variant = max(0, int(request.args.get("variant", 0)))
+    except ValueError:
+        variant = 0
 
     w = _weather_from(request)
-    key = _cache_key("outfits", user_id, w)
+    key = _cache_key("outfits", user_id, w, variant=variant)
     pool = _cache_get(key)
     was_cached = pool is not None
     try:
         if pool is None:
             from recommendation.outfit_suggest import suggest_outfits
-            pool = suggest_outfits(user_id, weather=w, count=POOL_SIZE)
+            pool = suggest_outfits(user_id, weather=w, count=POOL_SIZE, variant=variant)
             if pool:
                 _cache_put(key, pool)
         return jsonify({
@@ -122,6 +126,7 @@ def outfit_suggestions():
             "outfits": _slice(pool or [], count, offset),
             "total": len(pool or []),
             "offset": offset,
+            "variant": variant,
             "cached": was_cached,
         }), 200
     except Exception as e:
@@ -147,16 +152,21 @@ def discover():
         offset = max(0, int(request.args.get("offset", 0)))
     except ValueError:
         offset = 0
+    try:
+        variant = max(0, int(request.args.get("variant", 0)))
+    except ValueError:
+        variant = 0
 
     w = _weather_from(request)
-    key = _cache_key("discover", user_id, w, max_new=max_new, gender=gender or "")
+    key = _cache_key("discover", user_id, w, max_new=max_new,
+                     gender=gender or "", variant=variant)
     pool = _cache_get(key)
     was_cached = pool is not None
     try:
         if pool is None:
             from recommendation.outfit_suggest import discover_additions
             pool = discover_additions(user_id, weather=w, count=POOL_SIZE,
-                                      max_new=max_new, gender=gender)
+                                      max_new=max_new, gender=gender, variant=variant)
             if pool:
                 _cache_put(key, pool)
         return jsonify({
@@ -164,6 +174,7 @@ def discover():
             "discover": _slice(pool or [], count, offset),
             "total": len(pool or []),
             "offset": offset,
+            "variant": variant,
             "cached": was_cached,
         }), 200
     except Exception as e:

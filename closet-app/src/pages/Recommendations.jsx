@@ -152,13 +152,27 @@ export default function Recommendations() {
   const [discoverOffset, setDiscoverOffset] = useState(0);
   const [outfitTotal, setOutfitTotal]       = useState(0);
   const [discoverTotal, setDiscoverTotal]   = useState(0);
+  // Once a pool is exhausted the next Refresh asks for a new variant, which
+  // builds a genuinely different set rather than cycling the same looks.
+  const [outfitVariant, setOutfitVariant]     = useState(0);
+  const [discoverVariant, setDiscoverVariant] = useState(0);
+
+  const advance = (offset, total, setOffset, setVariant) => {
+    const next = offset + PAGE;
+    if (total && next >= total) {
+      setVariant((v) => v + 1);
+      setOffset(0);
+    } else {
+      setOffset(next);
+    }
+  };
 
   const qs = coords ? `lat=${coords.lat}&lon=${coords.lon}&` : "";
 
   useEffect(() => {
     let alive = true;
     setLoading(true);
-    axios.get(`${API}/suggestions/outfits?${qs}count=${PAGE}&offset=${outfitOffset}`,
+    axios.get(`${API}/suggestions/outfits?${qs}count=${PAGE}&offset=${outfitOffset}&variant=${outfitVariant}`,
               { headers: auth() })
       .then((r) => {
         if (!alive) return;
@@ -169,12 +183,12 @@ export default function Recommendations() {
       .catch(() => { if (alive) setOutfits([]); })
       .finally(() => { if (alive) setLoading(false); });
     return () => { alive = false; };
-  }, [qs, outfitOffset]);
+  }, [qs, outfitOffset, outfitVariant]);
 
   useEffect(() => {
     let alive = true;
     setDiscovering(true);
-    axios.get(`${API}/suggestions/discover?${qs}count=${PAGE}&offset=${discoverOffset}`,
+    axios.get(`${API}/suggestions/discover?${qs}count=${PAGE}&offset=${discoverOffset}&variant=${discoverVariant}`,
               { headers: auth() })
       .then((r) => {
         if (!alive) return;
@@ -187,7 +201,7 @@ export default function Recommendations() {
       .catch(() => { if (alive) { setDiscover([]); setDiscoverErr(true); } })
       .finally(() => { if (alive) setDiscovering(false); });
     return () => { alive = false; };
-  }, [qs, discoverOffset]);
+  }, [qs, discoverOffset, discoverVariant]);
 
   /* Carry the accessories over only if they are actually on screen, so the
      builder opens with the look the card is showing. */
@@ -239,11 +253,12 @@ export default function Recommendations() {
             </div>
             {outfitTotal > PAGE && (
               <button className="rec-refresh"
-                      onClick={() => setOutfitOffset((o) => o + PAGE)}
+                      onClick={() => advance(outfitOffset, outfitTotal, setOutfitOffset, setOutfitVariant)}
                       disabled={loading}>
                 Refresh
                 <span className="rec-refresh-count">
-                  {(outfitOffset % outfitTotal) + 1}-{Math.min((outfitOffset % outfitTotal) + PAGE, outfitTotal)} of {outfitTotal}
+                  {outfitOffset + 1}-{Math.min(outfitOffset + PAGE, outfitTotal)} of {outfitTotal}
+                  {outfitVariant > 0 ? ` · set ${outfitVariant + 1}` : ""}
                 </span>
               </button>
             )}
@@ -277,11 +292,12 @@ export default function Recommendations() {
             </div>
             {discoverTotal > PAGE && (
               <button className="rec-refresh"
-                      onClick={() => setDiscoverOffset((o) => o + PAGE)}
+                      onClick={() => advance(discoverOffset, discoverTotal, setDiscoverOffset, setDiscoverVariant)}
                       disabled={discovering}>
                 Refresh
                 <span className="rec-refresh-count">
-                  {(discoverOffset % discoverTotal) + 1}-{Math.min((discoverOffset % discoverTotal) + PAGE, discoverTotal)} of {discoverTotal}
+                  {discoverOffset + 1}-{Math.min(discoverOffset + PAGE, discoverTotal)} of {discoverTotal}
+                  {discoverVariant > 0 ? ` · set ${discoverVariant + 1}` : ""}
                 </span>
               </button>
             )}
