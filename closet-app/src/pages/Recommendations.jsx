@@ -157,6 +157,11 @@ export default function Recommendations() {
   const [outfitVariant, setOutfitVariant]     = useState(0);
   const [discoverVariant, setDiscoverVariant] = useState(0);
 
+  // "1-4 of 12" reads as a loop when a new set starts, so say which set it is.
+  const pageLabel = (offset, total, variant) =>
+    `${variant ? `Set ${variant + 1} · ` : ""}` +
+    `${offset + 1}-${Math.min(offset + PAGE, total)} of ${total}`;
+
   const advance = (offset, total, setOffset, setVariant) => {
     const next = offset + PAGE;
     if (total && next >= total) {
@@ -257,8 +262,7 @@ export default function Recommendations() {
                       disabled={loading}>
                 Refresh
                 <span className="rec-refresh-count">
-                  {outfitOffset + 1}-{Math.min(outfitOffset + PAGE, outfitTotal)} of {outfitTotal}
-                  {outfitVariant > 0 ? ` · set ${outfitVariant + 1}` : ""}
+                  {pageLabel(outfitOffset, outfitTotal, outfitVariant)}
                 </span>
               </button>
             )}
@@ -296,8 +300,7 @@ export default function Recommendations() {
                       disabled={discovering}>
                 Refresh
                 <span className="rec-refresh-count">
-                  {discoverOffset + 1}-{Math.min(discoverOffset + PAGE, discoverTotal)} of {discoverTotal}
-                  {discoverVariant > 0 ? ` · set ${discoverVariant + 1}` : ""}
+                  {pageLabel(discoverOffset, discoverTotal, discoverVariant)}
                 </span>
               </button>
             )}

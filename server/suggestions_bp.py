@@ -169,8 +169,11 @@ def outfit_suggestions():
             pool = suggest_outfits(user_id, weather=w, count=POOL_SIZE, variant=variant)
             if pool:
                 _cache_put(key, pool)
-        if not was_cached:          # only when this pool was just built
-            _prefetch("outfits", user_id, w, variant + 1)
+        # Every response, not only a freshly built one: gating this on a cache
+        # miss meant the chain stopped after a single step, so rolling to set 3
+        # had to build it while the page waited. _prefetch is a no-op when the
+        # variant is already cached or already being built.
+        _prefetch("outfits", user_id, w, variant + 1)
         return jsonify({
             "weather": w,
             "outfits": _slice(pool or [], count, offset),
@@ -219,9 +222,8 @@ def discover():
                                       max_new=max_new, gender=gender, variant=variant)
             if pool:
                 _cache_put(key, pool)
-        if not was_cached:
-            _prefetch("discover", user_id, w, variant + 1,
-                      max_new=max_new, gender=gender or "")
+        _prefetch("discover", user_id, w, variant + 1,
+                  max_new=max_new, gender=gender or "")
         return jsonify({
             "weather": w,
             "discover": _slice(pool or [], count, offset),

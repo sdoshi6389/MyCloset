@@ -59,7 +59,7 @@ def _blend(base: float, weather_fit: float, item: dict | None = None) -> float:
 def _best_for_slot(slot: str, pool: list[dict], chosen: list[dict],
                    profile: dict, weather: dict | None,
                    used: set[int], exclude_score_below: float = 0.0,
-                   variant: int = 0):
+                   variant: int = 0, spread: dict[int, int] | None = None):
     """Best unused item for a slot, or the variant-th best.
 
     Always taking the single top scorer made the whole thing deterministic: a
@@ -78,18 +78,27 @@ def _best_for_slot(slot: str, pool: list[dict], chosen: list[dict],
             )
         except Exception:
             continue
-        ranked.append((_blend(scored["total"], season_fit(cand, weather), cand), cand))
+        total = _blend(scored["total"], season_fit(cand, weather), cand)
+        if spread:
+            # A piece already carrying several looks in this pool steps aside so
+            # the next one gets a turn. Without it one pair of jeans took ten of
+            # the twelve looks: every look ranks the same closet the same way,
+            # then takes the top of that ranking.
+            total /= 1.0 + 0.45 * spread.get(cand["id"], 0)
+        ranked.append((total, cand))
 
     if not ranked:
         return None, 0.0
     ranked.sort(key=lambda r: -r[0])
     # Variant 0 is always the best pick. After that, choose among the top few at
-    # random but deterministically, seeded on the variant and the slot. Stepping
-    # by an index instead collided badly -- with a window of four, variant 2 at
-    # step 2 landed back on the best item, so whole sets repeated.
+    # random but deterministically. The seed takes the look's own anchor as well
+    # as the variant -- seeded on the variant alone, every look in a pool drew
+    # the same index and so landed on the same bottom.
     if variant:
         window = min(len(ranked), 5)
-        rng = random.Random((variant * 1000003) ^ (hash(slot) & 0xFFFF))
+        anchor = chosen[0]["id"] if chosen else 0
+        rng = random.Random((variant * 1000003) ^ (anchor * 2654435761)
+                            ^ (hash(slot) & 0xFFFF))
         idx = rng.randrange(window)
     else:
         idx = 0
@@ -167,6 +176,8 @@ def _suggest_outfits_uncached(user_id: int, weather: dict | None = None,
         rng2.shuffle(seeds)
 
     looks = []
+    # How many looks in this pool already lean on each piece.
+    spread: dict[int, int] = {}
     for top in seeds[: count * 2]:
         used = {top["id"]}
         top = {**top, "_slot": "inner_top"}
@@ -177,7 +188,8 @@ def _suggest_outfits_uncached(user_id: int, weather: dict | None = None,
 
         for slot in CORE_SLOTS[1:]:
             pick, sc = _best_for_slot(slot, by_slot.get(slot, []), chosen,
-                                      profile, weather, used, variant=variant)
+                                      profile, weather, used, variant=variant,
+                                      spread=spread)
             if pick:
                 pick = {**pick, "_slot": slot}
                 used.add(pick["id"]); chosen.append(pick)
@@ -189,7 +201,8 @@ def _suggest_outfits_uncached(user_id: int, weather: dict | None = None,
         # Outerwear only when the temperature actually calls for a layer.
         if weather and weather.get("layers", 1) >= 2:
             pick, sc = _best_for_slot("outer_top", by_slot.get("outer_top", []),
-                                      chosen, profile, weather, used, variant=variant)
+                                      chosen, profile, weather, used, variant=variant,
+                                      spread=spread)
             if pick:
                 pick = {**pick, "_slot": "outer_top"}
                 used.add(pick["id"]); chosen.append(pick)
@@ -203,7 +216,8 @@ def _suggest_outfits_uncached(user_id: int, weather: dict | None = None,
             if not pool:
                 continue
             pick, _sc = _best_for_slot(slot, pool, chosen, profile, weather, used,
-                                       exclude_score_below=0.40, variant=variant)
+                                       exclude_score_below=0.40, variant=variant,
+                                       spread=spread)
             if pick:
                 pick = {**pick, "_slot": slot}
                 used.add(pick["id"])
@@ -214,6 +228,8 @@ def _suggest_outfits_uncached(user_id: int, weather: dict | None = None,
             out["in_laundry"] = bool(it.get("in_laundry"))
             out["wear_count"] = it.get("wear_count") or 0
             return out
+        for _it in list(parts.values()) + list(accessories.values()):
+            spread[_it["id"]] = spread.get(_it["id"], 0) + 1
         looks.append({
             "score": round(score_sum / max(n, 1), 4),
             "weather_fit": round(
@@ -233,6 +249,14 @@ def _suggest_outfits_uncached(user_id: int, weather: dict | None = None,
         if tid in seen_tops:
             continue
         seen_tops.add(tid); deduped.append(L)
+
+    # Refresh past the end of a pool asks for the next variant, and that has to
+    # open on a shirt you have not just seen. Every variant scored the same
+    # closet and cut at the same place, so the top half of the ranking came back
+    # each time and only the bottoms moved -- on screen that reads as a loop.
+    if variant and len(deduped) > count:
+        start = (variant * count) % len(deduped)
+        deduped = deduped[start:] + deduped[:start]
     return deduped[:count]
 
 
@@ -271,8 +295,11 @@ def discover_additions(user_id: int, weather: dict | None = None,
     base_looks: list[dict] = []
 
     # Outfit pieces live in outfit_items, not on the outfit row.
+    # Read deeper than one page: the pool keeps at most half its slots for saved
+    # looks, and a later variant rotates to a different slice of them.
     saved = (supa.table("outfits").select("id, name")
-             .eq("user_id", user_id).order("id", desc=True).limit(count).execute().data) or []
+             .eq("user_id", user_id).order("id", desc=True)
+             .limit(max(count * 3, 30)).execute().data) or []
     if not saved:
         saved = []
     outfit_ids = [o["id"] for o in saved]
@@ -307,6 +334,16 @@ def discover_additions(user_id: int, weather: dict | None = None,
     # outfits so the rest can be looks the generator built, and the two are
     # interleaved below so the section reads as a feed rather than two blocks.
     keep_saved = max(1, count // 2)
+    if variant and base_looks:
+        # The first set has already shown every saved look, so repeating half of
+        # them is the fastest way to make a new set look like the old one. Give
+        # most of those slots back to generated looks, which do change per
+        # variant, and rotate through whatever saved share is left. Shrinking
+        # the share is what makes the rotation possible at all: with six saved
+        # outfits filling six slots there was nothing spare to rotate to.
+        keep_saved = max(1, min(keep_saved, len(base_looks) // 2))
+        start = (variant * keep_saved) % len(base_looks)
+        base_looks = base_looks[start:] + base_looks[:start]
     if len(base_looks) > keep_saved:
         base_looks = base_looks[:keep_saved]
 

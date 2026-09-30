@@ -71,14 +71,17 @@ def _precompute_suggestions() -> None:
         from suggestions_bp import _cache_key, _cache_put, POOL_SIZE
         for uid in users:
             try:
+                # variant=0 has to be in the key: the endpoints always ask for
+                # one, so a key without it never matched and every precomputed
+                # pool was thrown away unread.
                 looks = suggest_outfits(uid, weather=None, count=POOL_SIZE)
                 if looks:
-                    _cache_put(_cache_key("outfits", uid, None), looks)
+                    _cache_put(_cache_key("outfits", uid, None, variant=0), looks)
                 found = discover_additions(uid, weather=None, count=POOL_SIZE,
                                            max_new=2, gender=None)
                 if found:
-                    _cache_put(_cache_key("discover", uid, None,
-                                          max_new=2, gender=""), found)
+                    _cache_put(_cache_key("discover", uid, None, max_new=2,
+                                          gender="", variant=0), found)
             except Exception as e:
                 print(f"⚠️  precompute failed for user {uid}: {type(e).__name__}: {e}")
         if users:
