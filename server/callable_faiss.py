@@ -423,14 +423,37 @@ def _download_from_supabase() -> bool:
 
 
 # ── Local disk helpers ─────────────────────────────────────────────────────────
+# A build drops rows that have no embedding, so the index is always smaller than
+# the row count -- around 87% on this catalog. Far below that means tables were
+# skipped during the build.
+_MIN_VECTOR_RATIO = 0.70
+
+
 def _local_cache_valid(live_count: int) -> bool:
     if not os.path.exists(INDEX_FILE) or not os.path.exists(META_FILE):
         return False
     try:
         with open(FP_FILE) as f:
-            return json.load(f).get("row_count") == live_count
+            fp = json.load(f)
     except Exception:
         return False
+
+    if fp.get("row_count") != live_count:
+        return False
+
+    vectors = fp.get("vector_count")
+    if vectors is None:
+        # Written before builds recorded this; fall back to the file itself.
+        try:
+            vectors = os.path.getsize(INDEX_FILE) // (512 * 4)
+        except OSError:
+            return True
+
+    if live_count and vectors < live_count * _MIN_VECTOR_RATIO:
+        print(f"⚠️  cached index holds {vectors} vectors for {live_count} rows "
+              f"— looks truncated, ignoring it")
+        return False
+    return True
 
 def _load_from_disk() -> None:
     idx  = faiss.read_index(INDEX_FILE)
@@ -668,9 +691,14 @@ def _build_and_persist(tables: list[str], row_count: int) -> bool:
         pickle.dump(meta, f)
     with open(FP_FILE, "w") as f:
         json.dump({
-            "row_count": row_count,
-            "tables":    tables,
-            "built_at":  datetime.now(timezone.utc).isoformat(),
+            "row_count":    row_count,
+            # What the build actually produced, so a later load can tell a
+            # complete index from a truncated one. Comparing row counts alone
+            # could not: a build that skipped half its tables still wrote the
+            # full row count and passed validation forever.
+            "vector_count": len(meta),
+            "tables":       tables,
+            "built_at":     datetime.now(timezone.utc).isoformat(),
         }, f)
 
     _MEM["index"]      = index
@@ -719,6 +747,7 @@ def _ensure_index() -> bool:
             if _download_from_supabase() and _local_cache_valid(live_count):
                 _load_from_disk()
                 return True
+            print("⚠️  downloaded index did not validate — rebuilding")
 
         # 3. Full rebuild
         ok = _build_and_persist(tables, live_count)
