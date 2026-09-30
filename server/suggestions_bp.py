@@ -40,6 +40,54 @@ def _cache_key(kind: str, user_id: int, weather: dict | None, **kw) -> tuple:
     return (kind, user_id, season, layers, tuple(sorted(kw.items())))
 
 
+_INFLIGHT: set = set()
+_INFLIGHT_LOCK = threading.Lock()
+
+
+def _prefetch(kind: str, user_id: int, weather: dict | None, variant: int, **kw) -> None:
+    """Build the next variant off the request thread.
+
+    Paging within a pool is instant, but rolling to a new set had to generate
+    it while the user waited -- about a second for outfits and over three for
+    Discover, which runs a catalog search per look. Building it as soon as the
+    current set is served means the next click is a cache hit too.
+    """
+    key = _cache_key(kind, user_id, weather, variant=variant, **kw)
+    if _cache_get(key) is not None:
+        return
+
+    # Without this, paging through a pool fired a prefetch per click and three
+    # threads raced to build the same variant, competing with the request the
+    # user was waiting on.
+    with _INFLIGHT_LOCK:
+        if key in _INFLIGHT:
+            return
+        _INFLIGHT.add(key)
+
+    def work():
+        try:
+            if kind == "outfits":
+                from recommendation.outfit_suggest import suggest_outfits
+                pool = suggest_outfits(user_id, weather=weather,
+                                       count=POOL_SIZE, variant=variant)
+            else:
+                from recommendation.outfit_suggest import discover_additions
+                pool = discover_additions(user_id, weather=weather, count=POOL_SIZE,
+                                          max_new=kw.get("max_new", 2),
+                                          gender=kw.get("gender") or None,
+                                          variant=variant)
+            if pool:
+                _cache_put(key, pool)
+        except Exception as e:
+            print(f"⚠️  prefetch {kind} variant {variant}: {type(e).__name__}: {e}")
+        finally:
+            with _INFLIGHT_LOCK:
+                _INFLIGHT.discard(key)
+
+    threading.Thread(target=work, daemon=True,
+                     name=f"prefetch-{kind}-{variant}").start()
+
+
 def _slice(pool: list, count: int, offset: int) -> list:
     """Wrap around the pool so Refresh keeps returning something."""
     if not pool:
@@ -121,6 +169,8 @@ def outfit_suggestions():
             pool = suggest_outfits(user_id, weather=w, count=POOL_SIZE, variant=variant)
             if pool:
                 _cache_put(key, pool)
+        if not was_cached:          # only when this pool was just built
+            _prefetch("outfits", user_id, w, variant + 1)
         return jsonify({
             "weather": w,
             "outfits": _slice(pool or [], count, offset),
@@ -169,6 +219,9 @@ def discover():
                                       max_new=max_new, gender=gender, variant=variant)
             if pool:
                 _cache_put(key, pool)
+        if not was_cached:
+            _prefetch("discover", user_id, w, variant + 1,
+                      max_new=max_new, gender=gender or "")
         return jsonify({
             "weather": w,
             "discover": _slice(pool or [], count, offset),

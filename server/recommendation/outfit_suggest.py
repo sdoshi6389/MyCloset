@@ -83,9 +83,16 @@ def _best_for_slot(slot: str, pool: list[dict], chosen: list[dict],
     if not ranked:
         return None, 0.0
     ranked.sort(key=lambda r: -r[0])
-    # Stay near the top: wrap within the best few rather than reaching down into
-    # things that genuinely do not go together.
-    idx = variant % min(len(ranked), 3) if variant else 0
+    # Variant 0 is always the best pick. After that, choose among the top few at
+    # random but deterministically, seeded on the variant and the slot. Stepping
+    # by an index instead collided badly -- with a window of four, variant 2 at
+    # step 2 landed back on the best item, so whole sets repeated.
+    if variant:
+        window = min(len(ranked), 5)
+        rng = random.Random((variant * 1000003) ^ (hash(slot) & 0xFFFF))
+        idx = rng.randrange(window)
+    else:
+        idx = 0
     best_score, best = ranked[idx]
     if best_score < exclude_score_below:
         return None, 0.0
@@ -153,8 +160,11 @@ def _suggest_outfits_uncached(user_id: int, weather: dict | None = None,
         seeds = head + tail
 
     if variant and seeds:
-        shift = (variant * max(1, len(seeds) // 4)) % len(seeds)
-        seeds = seeds[shift:] + seeds[:shift]
+        # Shuffle rather than rotate: rotating showed the same looks in a
+        # different order once dedup-by-top collapsed them again.
+        rng2 = random.Random(variant * 7919)
+        seeds = list(seeds)
+        rng2.shuffle(seeds)
 
     looks = []
     for top in seeds[: count * 2]:
@@ -338,7 +348,9 @@ def discover_additions(user_id: int, weather: dict | None = None,
     todo = base_looks[:count]
     results = []
     if todo:
-        with ThreadPoolExecutor(max_workers=min(4, len(todo))) as ex:
+        # A pool of 12 looks means 12 catalog searches; four at a time left the
+        # rest queued behind them for seconds.
+        with ThreadPoolExecutor(max_workers=min(8, len(todo))) as ex:
             results = list(ex.map(_fetch, todo))
 
     out = []
