@@ -277,6 +277,75 @@ export default function Builder() {
   const scaleMapRef = useRef({});
   const [loadedScales, setLoadedScales] = useState({});
 
+  /* ── Undo / redo ────────────────────────────────────────────────────────
+     A look is the zones plus the two wrists. Rather than hook each of the
+     dozen places that change them -- drop, remove, replace, smart fill, clear,
+     load, add from the catalog -- this watches the result and records it. Any
+     future way of changing a look is covered without knowing about this.
+
+     The guard is the snapshot itself: undoing sets the state to exactly the
+     entry it moved to, so the next pass recognises it and records nothing.
+     That needs no "am I currently undoing" flag, which is the part of this
+     pattern that usually breaks. */
+  const HISTORY_LIMIT = 60;
+
+  const lookKey = (o, b) => JSON.stringify([
+    ZONES.map((z) => (o[z.id] ? o[z.id].id : null)),
+    b.left ? b.left.id : null,
+    b.right ? b.right.id : null,
+  ]);
+
+  const historyRef = useRef({ stack: [], idx: -1 });
+  const [canUndo, setCanUndo] = useState(false);
+  const [canRedo, setCanRedo] = useState(false);
+
+  const syncHistoryFlags = () => {
+    const h = historyRef.current;
+    setCanUndo(h.idx > 0);
+    setCanRedo(h.idx < h.stack.length - 1);
+  };
+
+  useEffect(() => {
+    const h = historyRef.current;
+    const key = lookKey(outfit, braceletStacks);
+    const here = h.stack[h.idx];
+    if (here && here.key === key) { syncHistoryFlags(); return; }
+    h.stack = h.stack.slice(0, h.idx + 1);
+    h.stack.push({ key, outfit, braceletStacks });
+    if (h.stack.length > HISTORY_LIMIT) h.stack.shift();
+    h.idx = h.stack.length - 1;
+    syncHistoryFlags();
+  }, [outfit, braceletStacks]);
+
+  const stepHistory = (delta) => {
+    const h = historyRef.current;
+    const next = h.idx + delta;
+    if (next < 0 || next >= h.stack.length) return;
+    h.idx = next;
+    const snap = h.stack[next];
+    setOutfit(snap.outfit);
+    setBraceletStacks(snap.braceletStacks);
+    syncHistoryFlags();
+  };
+
+  const undo = () => stepHistory(-1);
+  const redo = () => stepHistory(1);
+
+  useEffect(() => {
+    const onKey = (e) => {
+      if (!(e.ctrlKey || e.metaKey) || e.altKey) return;
+      // Never steal the shortcut from a field someone is typing in.
+      const t = e.target;
+      if (t && (t.isContentEditable || /^(INPUT|TEXTAREA|SELECT)$/.test(t.tagName))) return;
+      const k = e.key.toLowerCase();
+      if (k === "z" && !e.shiftKey)      { e.preventDefault(); undo(); }
+      else if (k === "z" && e.shiftKey)  { e.preventDefault(); redo(); }
+      else if (k === "y")                { e.preventDefault(); redo(); }
+    };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  });
+
   const [hovered, setHovered]       = useState(null);
   const [isDragging, setIsDragging] = useState(false);
   const [dragZone, setDragZone]     = useState(null);
@@ -989,6 +1058,12 @@ export default function Builder() {
             <button className="pb-btn-save" onClick={openSave} disabled={!filledCount}>
               Preserve
             </button>
+            <div className="pb-history">
+              <button className="pb-btn-hist" onClick={undo} disabled={!canUndo}
+                      title="Undo (Ctrl+Z)" aria-label="Undo">↶</button>
+              <button className="pb-btn-hist" onClick={redo} disabled={!canRedo}
+                      title="Redo (Ctrl+Shift+Z)" aria-label="Redo">↷</button>
+            </div>
             <button className="pb-btn-reset" onClick={resetOutfit}>Clear</button>
           </div>
         </header>

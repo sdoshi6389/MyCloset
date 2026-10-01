@@ -1754,3 +1754,26 @@
   text-decoration: none;
 }
 .pb-add-shop:hover { color: var(--text, #fff); text-decoration: underline; }
+
+/* ── Undo / redo ──────────────────────────────────────────────────────────
+   Paired, so they read as one control rather than two more header buttons. */
+.pb-history {
+  display: inline-flex;
+  border: 1px solid rgba(255,255,255,0.1);
+  border-radius: 999px;
+  overflow: hidden;
+  box-sizing: border-box;
+}
+.pb-btn-hist {
+  background: rgba(255,255,255,0.03);
+  border: none;
+  color: var(--text, #fff);
+  font-size: 14px;
+  line-height: 1;
+  padding: 7px 11px;
+  cursor: pointer;
+  transition: background 0.16s ease, color 0.16s ease;
+}
+.pb-btn-hist + .pb-btn-hist { border-left: 1px solid rgba(255,255,255,0.1); }
+.pb-btn-hist:hover:not(:disabled) { background: rgba(167,139,250,0.2); color: var(--accent); }
+.pb-btn-hist:disabled { opacity: 0.3; cursor: default; }
