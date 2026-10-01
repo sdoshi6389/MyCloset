@@ -36,6 +36,17 @@ def _run() -> None:
     except Exception as e:
         print(f"⚠️  CLIP warmup failed: {e}")
 
+    t2 = time.time()
+    try:
+        # The tag detector, reader and upscaler take ~23 s to load, and the
+        # first upload of a process paid all of it. Nobody is waiting here.
+        from ocr_utils import _ensure_ocr_models
+        ok = _ensure_ocr_models()
+        print(f"🔥 tag-OCR models {'warm' if ok else 'unavailable'} "
+              f"in {time.time() - t2:.1f}s")
+    except Exception as e:
+        print(f"⚠️  tag-OCR warmup failed: {e}")
+
     _precompute_suggestions()
 
 

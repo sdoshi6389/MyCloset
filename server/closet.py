@@ -185,6 +185,61 @@ def serve_image(user_id, filename):
 
 MAX_FILES_PER_UPLOAD = 8
 
+# A phone photo arrives at about 4300x5700 and 6-28 MB. Nothing downstream wants
+# that: the card shows it a few hundred pixels wide, CLIP sees 224, and GPT
+# downsamples it anyway. Carrying the full file only buys a slow card, a slow
+# Storage push and a slow upload to GPT -- re-encoding a 28 MB PNG at 2560px
+# takes 0.8 s and leaves 1.5 MB, which then pushes to Storage in 1.4 s instead
+# of 8.6 s.
+MAX_PHOTO_PX = 2560
+REENCODE_OVER_BYTES = 3 * 1024 * 1024
+
+
+def _normalise_photo(filepath: str, filename: str) -> tuple[str, str]:
+    """Convert HEIC and shrink oversized photos. Returns the path and name to use.
+
+    Hands back the original untouched if anything fails: a photo that is merely
+    large is still a usable photo, and losing the upload over it would be worse
+    than the lag this avoids.
+    """
+    ext = os.path.splitext(filename)[1].lower()
+    heic = ext in (".heic", ".heif")
+    try:
+        with _PILImage.open(filepath) as src:
+            too_big = max(src.size) > MAX_PHOTO_PX
+            heavy = os.path.getsize(filepath) > REENCODE_OVER_BYTES
+            if not (heic or too_big or heavy):
+                return filepath, filename
+            # Alpha is worth keeping where it exists; everything else becomes a
+            # JPEG, which is where most of the saving comes from.
+            keep_alpha = src.mode in ("RGBA", "LA") and not heic
+            im = src.convert("RGBA" if keep_alpha else "RGB")
+            if too_big:
+                im.thumbnail((MAX_PHOTO_PX, MAX_PHOTO_PX), _PILImage.LANCZOS)
+    except Exception as e:
+        print(f"Photo normalise failed for {filename}: {e}")
+        return filepath, filename
+
+    stem = os.path.splitext(filename)[0]
+    if keep_alpha:
+        new_name, fmt, kw = stem + ".png", "PNG", {"optimize": True}
+    else:
+        new_name, fmt, kw = stem + ".jpg", "JPEG", {"quality": 90, "optimize": True}
+    new_path = os.path.join(os.path.dirname(filepath), new_name)
+    try:
+        im.save(new_path, fmt, **kw)
+    except Exception as e:
+        print(f"Photo re-encode failed for {filename}: {e}")
+        return filepath, filename
+
+    if os.path.normcase(new_path) != os.path.normcase(filepath):
+        try:
+            os.remove(filepath)
+        except OSError:
+            pass
+    return new_path, new_name
+
+
 _ITEM_SELECT = (
     "id, filename, filepath, tag_text, brand, size, category, tags, "
     "matched_brand, matched_title, icon_path, caption, type, color, style, season, "
@@ -193,6 +248,11 @@ _ITEM_SELECT = (
     # wear tracking (migration 010)
     "wear_count, in_laundry, last_worn"
 )
+
+# The upsert returns every column; the response carries the same set the
+# listing endpoint sends, so a freshly uploaded card and a reloaded one match.
+_ITEM_COLUMNS = tuple(c.strip() for c in _ITEM_SELECT.split(",") if c.strip())
+
 
 @closet_bp.route("/upload_closet_images", methods=["POST"])
 def upload_images():
@@ -232,57 +292,30 @@ def upload_images():
             print(f"Save failed for {filename}: {e}")
             continue
 
-        # Convert HEIC/HEIF → JPEG; failures are logged but never crash the pipeline
-        if ext in (".heic", ".heif"):
-            try:
-                jpg_filename = filename.rsplit(".", 1)[0] + ".jpg"
-                jpg_filepath = os.path.join(user_folder, jpg_filename)
-                _PILImage.open(filepath).convert("RGB").save(jpg_filepath, "JPEG", quality=95)
-                os.remove(filepath)
-                filename = jpg_filename
-                filepath = jpg_filepath
-            except Exception as e:
-                print(f"HEIC conversion failed for {filename}: {e}")
-                if not os.path.exists(filepath):
-                    continue  # can't proceed without a readable file
+        filepath, filename = _normalise_photo(filepath, filename)
+        if not os.path.exists(filepath):
+            continue  # can't proceed without a readable file
 
-        # Push the original photo to Supabase Storage so the deployed app can
-        # serve it via the /static redirect (local disk is ephemeral there).
-        try:
-            from storage_utils import upload_file
-            upload_file(filepath, f"{user_id}/{filename}")
-        except Exception as e:
-            print(f"Storage upload failed for {filename}: {e}")
-
-        try:
-            tag_text = extract_tag_text(filepath)
-            print(f"OCR tag for {filename}: {tag_text}")
-        except Exception as e:
-            print(f"OCR failed for {filename}: {e}")
-            tag_text = None
-
-        existing = supa.table("closet_items").select("id, icon_path").eq("user_id", user_id).eq("filename", filename).execute()
-        has_icon = bool(existing.data and existing.data[0].get("icon_path"))
-
-        supa.table("closet_items").upsert({
+        # Everything else -- the Storage push, the tag OCR, the icon and the
+        # embedding -- runs after the response. /static serves the file just
+        # written to local disk, so the card renders without waiting on any of
+        # it, and the upsert hands back the stored row, so neither the select
+        # before it nor the one after it is needed.
+        row = (supa.table("closet_items").upsert({
             "user_id": user_id,
             "filename": filename,
             "filepath": filepath,
-            "tag_text": tag_text,
-        }, on_conflict="user_id,filename").execute()
+        }, on_conflict="user_id,filename").execute().data or [None])[0]
+        if not row:
+            print(f"Upsert returned no row for {filename}")
+            continue
 
-        # Return the full row so the frontend can render the card immediately
-        item_res = supa.table("closet_items").select(_ITEM_SELECT).eq("user_id", user_id).eq("filename", filename).execute()
-        if item_res.data:
-            uploaded_items.append(_serialize_item(item_res.data[0], user_id))
-
-        if not has_icon:
-            queued.append((filepath, filename, user_id, tag_text or ""))
-        else:
-            print(f"Icon already exists for {filename}, skipping AI pipeline.")
+        uploaded_items.append(
+            _serialize_item({k: row.get(k) for k in _ITEM_COLUMNS}, user_id))
+        queued.append((filepath, filename, user_id, bool(row.get("icon_path"))))
 
     for args in queued:
-        t = threading.Thread(target=_run_ai_pipeline, args=args, daemon=True)
+        t = threading.Thread(target=_finish_upload, args=args, daemon=True)
         t.start()
 
     return jsonify({
@@ -318,6 +351,36 @@ def _ensure_local_file(user_id: int, filename: str) -> str | None:
     except Exception as e:
         print(f"⚠️  Storage download failed for {filename}: {e}")
     return None
+
+
+def _finish_upload(filepath, filename, user_id, has_icon=False):
+    """Everything the upload response does not have to wait for.
+
+    Pushing the photo to Storage was 4-9 s of the request on its own, and tag
+    OCR another 0.5 s once its models are warm -- 23 s on the first call of a
+    process, while the detector, reader and upscaler load. Neither changes what
+    the new card shows, so both moved off the request.
+    """
+    try:
+        from storage_utils import upload_file
+        upload_file(filepath, f"{user_id}/{filename}")
+    except Exception as e:
+        print(f"Storage upload failed for {filename}: {e}")
+
+    tag_text = ""
+    try:
+        tag_text = extract_tag_text(filepath) or ""
+        print(f"OCR tag for {filename}: {tag_text!r}")
+        if tag_text:
+            get_supa().table("closet_items").update({"tag_text": tag_text}) \
+                .eq("user_id", user_id).eq("filename", filename).execute()
+    except Exception as e:
+        print(f"OCR failed for {filename}: {e}")
+
+    if has_icon:
+        print(f"Icon already exists for {filename}, skipping AI pipeline.")
+        return
+    _run_ai_pipeline(filepath, filename, user_id, tag_text)
 
 
 def _run_ai_pipeline(filepath, filename, user_id, tag_text=""):
