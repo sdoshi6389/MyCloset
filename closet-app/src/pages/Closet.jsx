@@ -6,6 +6,7 @@ import { useCircle } from "../context/CircleContext";
 import "./Closet.css";
 
 import { API_BASE as API, iconSrc, thumbSrc, photoSrc, fallbackToIcon } from "../config";
+import { shrinkForUpload } from "../lib/shrinkImage";
 import { motion } from "framer-motion";
 
 // ClosetItemCard is a sibling component, so the parent's authHeaders is
@@ -139,7 +140,10 @@ function Closet() {
     await Promise.all(
       toUpload.map(async (file, idx) => {
         const formData = new FormData();
-        formData.append("files", file);
+        // Shrink before it goes on the wire. The server caps stored photos at
+        // the same size regardless, so this only decides whether 28 MB or
+        // 1.4 MB makes the trip -- and the trip is now the slow part.
+        formData.append("files", await shrinkForUpload(file));
         try {
           const res = await axios.post(`${API}/upload_closet_images`, formData, {
             headers: { ...authHeaders(), "Content-Type": "multipart/form-data" },
