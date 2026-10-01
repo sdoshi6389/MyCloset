@@ -255,6 +255,11 @@ export default function Builder() {
   }, []);
 
   const [items, setItems]       = useState([]);
+  /* Catalog pieces that came in with a Discover look. They finish the outfit
+     but are not in the closet, so they cannot go on the canvas until they are
+     added -- they sit beside it until then. */
+  const [additions, setAdditions] = useState([]);
+  const [addingKey, setAddingKey] = useState(null);
   const [outfit, setOutfit]     = useState(() =>
     Object.fromEntries(ZONES.map((z) => [z.id, null]))
   );
@@ -721,6 +726,11 @@ export default function Builder() {
      Waits for items so the ids can be resolved, and runs once -- the state is
      cleared afterwards so a refresh does not silently re-apply it. */
   useEffect(() => {
+    const incoming = location.state?.additions;
+    if (incoming?.length) setAdditions(incoming);
+  }, [location.state]);
+
+  useEffect(() => {
     const suggestion = location.state?.suggestion;
     if (!suggestion || appliedSuggestionRef.current || !items.length) return;
     const next = Object.fromEntries(ZONES.map((z) => [z.id, null]));
@@ -752,6 +762,42 @@ export default function Builder() {
       navigate(".", { replace: true, state: {} });
     }
   }, [location.state, items, navigate]);
+
+  /* Put a catalog piece in the closet and, if it belongs to a zone, drop it
+     straight into the look -- the point of the panel is finishing the outfit,
+     not just shopping. */
+  const addFromCatalog = async (add, key) => {
+    if (addingKey) return;
+    setAddingKey(key);
+    try {
+      const { data } = await axios.post(`${API_BASE}/closet/add_from_catalog`, add,
+                                        { headers: auth() });
+      const item = data?.item;
+      if (item) {
+        setItems((prev) => (prev.some((i) => i.id === item.id)
+          ? prev.map((i) => (i.id === item.id ? { ...i, ...item } : i))
+          : [...prev, item]));
+        if (ZONES.some((z) => z.id === add.slot)) {
+          setOutfit((prev) => ({ ...prev, [add.slot]: {
+            id:        item.id,
+            filename:  item.filename,
+            brand:     item.brand,
+            icon_url:  item.icon_path || add.icon_url || add.image_url || null,
+            thumb_url: null,
+            image_url: add.image_url || null,
+            title:     item.matched_title || add.title,
+            source:    "closet",
+          } }));
+        }
+        setAdditions((prev) => prev.filter((a) => a !== add));
+      }
+    } catch (e) {
+      console.error("Could not add that piece:", e);
+      alert(e?.response?.data?.message || "Could not add that piece to your closet.");
+    } finally {
+      setAddingKey(null);
+    }
+  };
 
   const loadOutfit = (saved) => {
     const next = Object.fromEntries(ZONES.map((z) => [z.id, null]));
@@ -1038,6 +1084,47 @@ export default function Builder() {
 
           {/* Editorial column */}
           <aside className="pb-editorial">
+            {additions.length > 0 && (
+              <div className="pb-adds">
+                <div className="pb-adds-head">
+                  <span className="pb-adds-label">Add to finish</span>
+                  <button className="pb-adds-clear" onClick={() => setAdditions([])}
+                          title="Dismiss these">✕</button>
+                </div>
+                {additions.map((a, i) => (
+                  <div key={`${a.slot}-${i}`} className="pb-add">
+                    <div className="pb-add-img">
+                      {(a.icon_url || a.image_url)
+                        ? <img src={a.icon_url || a.image_url} alt={a.title || ""}
+                               loading="lazy"
+                               onError={(e) => {
+                                 const img = e.currentTarget;
+                                 if (img.dataset.fellBack || !a.image_url) return;
+                                 img.dataset.fellBack = "1";
+                                 img.src = a.image_url;
+                               }} />
+                        : <span className="pb-add-blank" />}
+                    </div>
+                    <div className="pb-add-body">
+                      <span className="pb-add-slot">{a.slot.replace(/_/g, " ")}</span>
+                      <span className="pb-add-title">{a.title || "Catalog piece"}</span>
+                      {a.brand && <span className="pb-add-brand">{a.brand}</span>}
+                      <div className="pb-add-actions">
+                        <button className="pb-add-btn"
+                                disabled={addingKey !== null}
+                                onClick={() => addFromCatalog(a, `${a.slot}-${i}`)}>
+                          {addingKey === `${a.slot}-${i}` ? "Adding…" : "Add to closet"}
+                        </button>
+                        {a.shop_url && (
+                          <a className="pb-add-shop" href={a.shop_url}
+                             target="_blank" rel="noreferrer">Shop</a>
+                        )}
+                      </div>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            )}
             <EditorialColumn
               outfit={outfit}
               savedOutfits={savedOutfits}

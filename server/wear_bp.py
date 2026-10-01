@@ -124,16 +124,15 @@ def get_week():
                     .in_("id", list(item_ids)).execute().data) or []
             meta = {r["id"]: r for r in rows}
 
-        from storage_utils import public_url, thumb_url
+        from storage_utils import public_url, thumb_url, icon_urls
         def fmt(row):
-            icon = row.get("icon_path")
-            fname = icon.replace("\\", "/").split("/")[-1] if icon else None
+            full, thumb = icon_urls(row.get("icon_path"))
             return {
                 "id":         row["id"],
                 "title":      row.get("matched_title") or row.get("caption") or row.get("type"),
                 "brand":      row.get("brand"),
-                "icon_url":   public_url(f"icons/{fname}") if fname else None,
-                "thumb_url":  thumb_url(fname) if fname else None,
+                "icon_url":   full,
+                "thumb_url":  thumb,
                 "in_laundry": bool(row.get("in_laundry")),
             }
 
@@ -285,14 +284,13 @@ def stats():
             rows = (supa.table("closet_items")
                     .select("id, matched_title, caption, type, icon_path")
                     .in_("id", ids).execute().data) or []
-            from storage_utils import thumb_url
+            from storage_utils import icon_urls
             for r in rows:
                 icon = r.get("icon_path")
-                fname = icon.replace("\\", "/").split("/")[-1] if icon else None
                 top.append({
                     "id": r["id"],
                     "title": r.get("matched_title") or r.get("caption") or r.get("type"),
-                    "thumb_url": thumb_url(fname) if fname else None,
+                    "thumb_url": icon_urls(icon)[1],
                     "times": counts.get(r["id"], 0),
                 })
             top.sort(key=lambda x: x["times"], reverse=True)

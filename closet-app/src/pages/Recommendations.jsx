@@ -53,6 +53,15 @@ function useCoords() {
 
 const srcOf = (item) => item?.thumb_url || item?.icon_url || item?.image_url || null;
 
+/* The cutout can be missing for an item the extractor has not reached yet, so
+   swap in the product photo rather than leaving a broken frame. */
+const fallbackToPhoto = (item) => (e) => {
+  const img = e.currentTarget;
+  if (img.dataset.fellBack || !item?.image_url || img.src === item.image_url) return;
+  img.dataset.fellBack = "1";
+  img.src = item.image_url;
+};
+
 /* The outfit itself, stacked. */
 function OutfitStack({ items, accessories, showAccessories }) {
   const shown = showAccessories ? { ...items, ...accessories } : items;
@@ -221,6 +230,28 @@ export default function Recommendations() {
     navigate("/outfits", { state: { suggestion } });
   };
 
+  /* A Discover look is closet pieces plus catalog ones that are not in the
+     closet yet. The builder gets the closet ids to place on the canvas and the
+     catalog pieces to offer beside it, since it cannot place what the closet
+     does not hold. */
+  const openDiscoverInBuilder = (d) => {
+    const suggestion = {};
+    for (const [slot, item] of Object.entries(d.base || {})) {
+      if (item?.id) suggestion[slot] = item.id;
+    }
+    const additions = (d.additions || []).map((a) => ({
+      slot:      a.slot,
+      title:     a.item?.title || "",
+      brand:     a.item?.brand || "",
+      color:     a.item?.color || "",
+      price:     a.item?.price ?? null,
+      shop_url:  a.item?.shop_url || null,
+      image_url: a.item?.image_url || null,
+      icon_url:  a.item?.icon_url || a.item?.thumb_url || null,
+    }));
+    navigate("/outfits", { state: { suggestion, additions } });
+  };
+
   const weatherNote = weather ? ", ranked for the weather where you are" : "";
 
   return (
@@ -346,7 +377,8 @@ export default function Recommendations() {
                           transition={{ duration: 0.3, ease: EASE, delay: 0.05 * k }}
                         >
                           {srcOf(a.item)
-                            ? <img src={srcOf(a.item)} alt={a.item.title || ""} loading="lazy" />
+                            ? <img src={srcOf(a.item)} alt={a.item.title || ""} loading="lazy"
+                                   onError={fallbackToPhoto(a.item)} />
                             : <span className="rec-add-blank" />}
                           <span className="rec-add-slot">{a.slot.replace(/_/g, " ")}</span>
                           <span className="rec-add-pop" role="tooltip">
@@ -364,6 +396,12 @@ export default function Recommendations() {
 
                   <div className="rec-card-foot">
                     <p className="rec-card-reason">{d.reason}</p>
+                    <div className="rec-card-actions">
+                      <button className="rec-btn rec-btn--primary"
+                              onClick={() => openDiscoverInBuilder(d)}>
+                        Open in builder
+                      </button>
+                    </div>
                   </div>
                 </motion.article>
               ))}

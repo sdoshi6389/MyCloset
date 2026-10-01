@@ -2,6 +2,7 @@ from flask import Blueprint, request, jsonify, send_from_directory
 import os
 import re
 import jwt
+import hashlib
 import threading
 from werkzeug.utils import secure_filename
 from db import get_supa
@@ -322,6 +323,105 @@ def upload_images():
         "message": f"Uploaded {len(uploaded_items)} file(s). AI tagging running in background.",
         "items": uploaded_items,
     }), 200
+
+
+@closet_bp.route("/closet/add_from_catalog", methods=["POST"])
+def add_from_catalog():
+    """Put a catalog piece into the user's closet.
+
+    The expensive parts of a normal upload are already done for a catalog item:
+    it has a title, a brand and, once extracted, a garment-only cutout. So this
+    skips the GPT metadata and icon steps entirely and reuses what the
+    recommendation already carried, leaving only the CLIP embedding, which runs
+    behind the response like it does for an upload.
+    """
+    user_id = get_user_id_from_token(request)
+    if not user_id:
+        return jsonify({"message": "Unauthorized"}), 401
+
+    data = request.get_json(silent=True) or {}
+    image_url = (data.get("icon_url") or data.get("image_url") or "").strip()
+    if not image_url:
+        return jsonify({"message": "No image to add"}), 400
+
+    title = (data.get("title") or "").strip() or None
+    brand = (data.get("brand") or "").strip() or None
+    slot  = (data.get("slot") or "").strip() or None
+    from recommendation.engine import SLOT_CATEGORIES
+    category = (SLOT_CATEGORIES.get(slot) or [None])[0]
+
+    # A stable name per product, so adding the same piece twice updates the one
+    # row rather than filling the closet with copies of it.
+    digest = hashlib.sha1(f"{image_url}|{slot or ''}".encode("utf-8")).hexdigest()[:10]
+    ext = ".png" if ".png" in image_url.lower().split("?")[0][-5:] else ".jpg"
+    filename = f"catalog_{digest}{ext}"
+
+    user_folder = os.path.join(UPLOAD_FOLDER, str(user_id))
+    os.makedirs(user_folder, exist_ok=True)
+    filepath = os.path.join(user_folder, filename)
+
+    try:
+        import requests as _req
+        r = _req.get(image_url, timeout=60)
+        if r.status_code != 200 or not r.content:
+            return jsonify({"message": f"Could not fetch the image ({r.status_code})"}), 502
+        with open(filepath, "wb") as f:
+            f.write(r.content)
+    except Exception as e:
+        print(f"add_from_catalog: fetch failed for {image_url[:80]}: {e}")
+        return jsonify({"message": "Could not fetch the image"}), 502
+
+    filepath, filename = _normalise_photo(filepath, filename)
+
+    # The cutout is already published, so storing its URL is enough -- re-encoding
+    # it to WebP and uploading it again under icons/ cost 14 s of the click for a
+    # second copy of a file Storage was already serving. It has no 320px thumb
+    # though, and a grid should not pull the full file, so publish just that.
+    icon_path = image_url if image_url.startswith("http") else None
+    if icon_path:
+        try:
+            from storage_utils import upload_thumb
+            upload_thumb(filepath, icon_path.split("/")[-1])
+        except Exception as e:
+            print(f"add_from_catalog: thumb failed for {filename}: {e}")
+
+    supa = get_supa()
+    row = (supa.table("closet_items").upsert({
+        "user_id":       user_id,
+        "filename":      filename,
+        "filepath":      filepath,
+        "brand":         brand,
+        "matched_title": title,
+        "caption":       title,
+        "category":      category,
+        "color":         (data.get("color") or "").strip() or None,
+        "icon_path":     icon_path,
+    }, on_conflict="user_id,filename").execute().data or [None])[0]
+    if not row:
+        return jsonify({"message": "Could not save the item"}), 500
+
+    threading.Thread(target=_finish_catalog_add,
+                     args=(filepath, filename, user_id), daemon=True).start()
+
+    return jsonify({
+        "message": "Added to your closet",
+        "item": _serialize_item({k: row.get(k) for k in _ITEM_COLUMNS}, user_id),
+    }), 200
+
+
+def _finish_catalog_add(filepath, filename, user_id):
+    """Storage copy and CLIP embedding for a piece added from the catalog."""
+    try:
+        from storage_utils import upload_file
+        upload_file(filepath, f"{user_id}/{filename}")
+    except Exception as e:
+        print(f"Storage upload failed for {filename}: {e}")
+    try:
+        embedding = generate_clip_embedding(filepath)
+        save_embedding_to_db(user_id, filename, embedding)
+        print(f"Embedding saved for {filename}")
+    except Exception as e:
+        print(f"Embedding failed for {filename}: {e}")
 
 
 def _ensure_local_file(user_id: int, filename: str) -> str | None:

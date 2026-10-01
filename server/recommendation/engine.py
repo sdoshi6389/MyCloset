@@ -135,18 +135,16 @@ def _parse_tags(s) -> list[str]:
 
 # ── Output formatters ─────────────────────────────────────────────────────────
 def _format_closet_item(row: dict, user_id: int, scored: dict, reason: str) -> dict:
-    from storage_utils import public_url, thumb_url
-    icon_path = row.get("icon_path")
-    # basename() won't strip a Windows "icon_outputs\" prefix on Linux
-    fname = icon_path.replace("\\", "/").split("/")[-1] if icon_path else None
+    from storage_utils import public_url, thumb_url, icon_urls
+    _icon_full, _icon_thumb = icon_urls(row.get("icon_path"))
     return {
         "id":              row["id"],
         "title":           row.get("matched_title") or row.get("caption") or row.get("type") or "Item",
         "brand":           row.get("brand"),
         "color":           row.get("color"),
         "category":        row.get("category"),
-        "icon_url":        public_url(f"icons/{fname}") if fname else None,
-        "thumb_url":       thumb_url(fname) if fname else None,
+        "icon_url":        _icon_full,
+        "thumb_url":       _icon_thumb,
         "image_url":       public_url(f"{user_id}/{row['filename']}"),
         "price":           None,
         "shop_url":        None,
@@ -158,6 +156,39 @@ def _format_closet_item(row: dict, user_id: int, scored: dict, reason: str) -> d
         "score_breakdown": scored["breakdown"],
         "reason":          reason,
     }
+
+
+def _attach_catalog_icons(items: list[dict], slot: str | None) -> None:
+    """Point catalog cards at the garment-only cutout where one already exists.
+
+    A catalog hit carries the scraped product photo, which is very often the
+    garment on a model. The extraction cache usually already holds a cutout for
+    that exact (image, slot), and that is what a card wants to show. One query
+    for the whole slot rather than one per card.
+
+    Rows written before extractions moved to Storage hold a local path from
+    whichever machine ran them, which is no use anywhere else, so those are left
+    for prewarm to redo and the card falls back to the photo meanwhile.
+    """
+    by_key = {}
+    for it in items:
+        url = it.get("image_url")
+        if url:
+            by_key[f"v3:{url}|{slot or ''}"] = it
+    if not by_key:
+        return
+    try:
+        rows = (get_supa().table("catalog_icon_cache")
+                .select("cache_key, icon_path")
+                .in_("cache_key", list(by_key)).execute().data) or []
+    except Exception as e:
+        print(f"⚠️  catalog icon lookup: {type(e).__name__}: {e}")
+        return
+    for r in rows:
+        it = by_key.get(r.get("cache_key"))
+        path = r.get("icon_path") or ""
+        if it and path.startswith("http"):
+            it["icon_url"] = path
 
 
 def _format_catalog_item(hit: dict, scored: dict, reason: str) -> dict:
@@ -446,8 +477,10 @@ def get_recommendations(
         results[slot] = final
 
         # Catalog cards need their background stripped before they look right.
-        # Start that now rather than waiting for each card to ask on render.
+        # Serve the cutout where one is already cached, and start the rest now
+        # rather than waiting for each card to ask on render.
         if mode == "catalog" and final:
+            _attach_catalog_icons(final, slot)
             try:
                 from catalog_prewarm import prewarm
                 prewarm(final, slot)

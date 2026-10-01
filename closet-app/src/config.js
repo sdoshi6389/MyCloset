@@ -23,6 +23,9 @@ const iconName = (icon_path) => icon_path.replace(/\\/g, "/").split("/").pop();
 // Use for canvas zones and detail views.
 export function iconSrc(icon_path) {
   if (!icon_path) return null;
+  // A piece added from the catalog keeps the cutout extraction already
+  // published, which lives outside icons/ and arrives as a full URL.
+  if (icon_path.startsWith("http")) return icon_path;
   return `${STORAGE_BASE}/icons/${encodeURIComponent(iconName(icon_path))}`;
 }
 
@@ -30,6 +33,8 @@ export function iconSrc(icon_path) {
 // and cards. Pair with onError={fallbackToIcon} for icons made before thumbs.
 export function thumbSrc(icon_path) {
   if (!icon_path) return null;
+  // Those keep their own basename, and a thumb is published beside the cutout
+  // under it when the item is added, so the same rule resolves both.
   return `${STORAGE_BASE}/icons/thumb/${encodeURIComponent(iconName(icon_path))}`;
 }
 
