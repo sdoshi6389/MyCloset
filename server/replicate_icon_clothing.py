@@ -9,6 +9,8 @@ All steps are independent. Failure in one does not block the others.
 """
 import openai
 import os
+import re
+import hashlib
 import requests
 import json
 import base64
@@ -239,7 +241,21 @@ def analyze_image_with_gpt(image_path, tag_text=None):
 
 
 # === Step 2: GPT icon generation (transparent background) =======================
-def generate_icon_via_gpt(icon_prompt, source_image_path=None, output_dir=ICON_OUTPUTS_DIR):
+def icon_stem_for(user_id, filename: str) -> str:
+    """A stable, collision-free name for one closet item's icon.
+
+    (user_id, filename) is already the unique key for a closet item, so the icon
+    inherits it. The hash is there because two different filenames can sanitise
+    to the same string.
+    """
+    base = os.path.splitext(os.path.basename(filename or ""))[0]
+    safe = re.sub(r"[^A-Za-z0-9_-]+", "_", base).strip("_")[:48] or "item"
+    digest = hashlib.sha1(f"{user_id}/{filename}".encode("utf-8")).hexdigest()[:8]
+    return f"{user_id}_{safe}_{digest}"
+
+
+def generate_icon_via_gpt(icon_prompt, source_image_path=None, output_dir=ICON_OUTPUTS_DIR,
+                          icon_stem=None):
     """
     Produce a clean transparent-background PNG icon for a clothing item.
 
@@ -253,7 +269,12 @@ def generate_icon_via_gpt(icon_prompt, source_image_path=None, output_dir=ICON_O
     """
     client = openai.OpenAI(api_key=OPENAI_API_KEY)
     os.makedirs(output_dir, exist_ok=True)
-    safe = icon_prompt[:60].replace(" ", "_").replace("/", "_").replace(":", "")
+    # The name used to be the first 60 characters of the prompt. Every prompt
+    # starts with the same instruction and the caption that identifies the
+    # garment falls past that cut, so every item generated this way wrote to one
+    # filename and overwrote whatever was there -- a white tee, white trousers
+    # and a grey hoodie all shared a single icon. icon_stem is per item.
+    safe = icon_stem or icon_prompt[:60].replace(" ", "_").replace("/", "_").replace(":", "")
     out_path = os.path.join(output_dir, f"icon_{safe}.png")
 
     def _write_from_response(item, label):
@@ -441,7 +462,8 @@ def generate_icon_from_image(image_path, user_id, filename, tag_text=None, outpu
     # ── Step 2: GPT icon generation (transparent background) ────────────────
     icon_path = None
     try:
-        icon_path = generate_icon_via_gpt(icon_prompt, image_path, output_dir)
+        icon_path = generate_icon_via_gpt(icon_prompt, image_path, output_dir,
+                                          icon_stem=icon_stem_for(user_id, filename))
         if icon_path:
             print(f"✅ Icon saved: {icon_path}")
         else:
