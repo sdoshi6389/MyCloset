@@ -37,6 +37,12 @@ def _get_clip():
     return _MODEL, _PROCESSOR
 
 
+def is_loaded() -> bool:
+    """True when the model is already resident, so a caller can decide whether
+    it can afford to wait. Loading it costs about a minute on a cold process."""
+    return _MODEL is not None
+
+
 def generate_clip_embedding(image_path):
     import torch
     model, processor = _get_clip()

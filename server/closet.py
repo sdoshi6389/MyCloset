@@ -8,7 +8,9 @@ from werkzeug.utils import secure_filename
 from db import get_supa
 from config import JWT_SECRET
 from ocr_utils import extract_tag_text
-from callable_embedding import generate_clip_embedding, save_embedding_to_db
+from callable_embedding import (generate_clip_embedding, save_embedding_to_db,
+                                is_loaded as clip_is_loaded)
+import warmup
 from callable_faiss import search_similar_products
 import numpy as np
 from PIL import Image as _PILImage
@@ -255,6 +257,65 @@ _ITEM_SELECT = (
 _ITEM_COLUMNS = tuple(c.strip() for c in _ITEM_SELECT.split(",") if c.strip())
 
 
+# How alike two photos have to be before the upload stops to ask.
+#
+# Calibrated against this closet rather than guessed. Re-embedding a photo that
+# is already in the closet scores 1.0000, but two genuinely different pairs of
+# grey cargo joggers score 0.9972 -- CLIP cannot separate "the same garment
+# again" from "a garment that looks almost the same", and no threshold can. So
+# this asks rather than decides, and sits high enough that only one existing
+# pair in a closet of 47 would raise the question.
+DUPLICATE_SIM = 0.985
+
+
+def _closest_existing(user_id: int, embedding, skip_filename: str) -> dict | None:
+    """The closet item this photo most resembles, if it resembles one enough."""
+    import numpy as np
+    from recommendation.scorer import _parse_vector
+    from storage_utils import icon_urls
+
+    vec = np.asarray(embedding, dtype=np.float32)
+    norm = np.linalg.norm(vec)
+    if not norm:
+        return None
+    vec = vec / norm
+
+    rows = (get_supa().table("closet_items")
+            .select("id, filename, matched_title, caption, type, brand, "
+                    "icon_path, vector_embedding")
+            .eq("user_id", user_id).execute().data) or []
+
+    best, best_sim = None, 0.0
+    for r in rows:
+        if r["filename"] == skip_filename:
+            continue
+        other = _parse_vector(r.get("vector_embedding"))
+        if other is None or not len(other):
+            continue
+        other = np.asarray(other, dtype=np.float32)
+        n = np.linalg.norm(other)
+        if not n:
+            continue
+        sim = float(vec @ (other / n))
+        if sim > best_sim:
+            best, best_sim = r, sim
+
+    if not best or best_sim < DUPLICATE_SIM:
+        return None
+    full, thumb = icon_urls(best.get("icon_path"))
+    return {
+        "id":         best["id"],
+        "filename":   best["filename"],
+        "title":      (best.get("matched_title") or best.get("caption")
+                       or best.get("type") or "Untitled"),
+        "brand":      best.get("brand"),
+        "icon_url":   full,
+        "thumb_url":  thumb,
+        "url":        f"/static/{user_id}/{best['filename']}",
+        "similarity": round(best_sim, 4),
+    }
+
+
 @closet_bp.route("/upload_closet_images", methods=["POST"])
 def upload_images():
     user_id = get_user_id_from_token(request)
@@ -274,6 +335,7 @@ def upload_images():
 
     queued = []
     uploaded_items = []
+    duplicates = {}
 
     for file in files:
         if not (file and file.filename):
@@ -313,7 +375,36 @@ def upload_images():
 
         uploaded_items.append(
             _serialize_item({k: row.get(k) for k in _ITEM_COLUMNS}, user_id))
-        queued.append((filepath, filename, user_id, bool(row.get("icon_path"))))
+
+        # The embedding is needed either way, and having it here is what makes
+        # the duplicate check possible before any of the paid work starts.
+        #
+        # Only when the model is already resident, though. Loading it takes
+        # about a minute, and an upload that hangs for a minute is a worse
+        # outcome than one that does not notice a duplicate -- those uploads go
+        # through the normal path, which embeds behind the response as before.
+        match, embedding = None, None
+        if clip_is_loaded():
+            try:
+                embedding = generate_clip_embedding(filepath)
+                save_embedding_to_db(user_id, filename, embedding)
+                match = _closest_existing(user_id, embedding, filename)
+            except Exception as e:
+                print(f"Duplicate check skipped for {filename}: {type(e).__name__}: {e}")
+                embedding = None
+        else:
+            print(f"CLIP not resident — {filename} skips the duplicate check")
+            warmup.kick()
+
+        if match:
+            # Hold everything -- Storage, OCR, GPT -- until the person says this
+            # really is a new piece. The card still renders from local disk.
+            duplicates[filename] = match
+            print(f"Possible duplicate: {filename} ~ {match['filename']} "
+                  f"({match['similarity']})")
+        else:
+            queued.append((filepath, filename, user_id, bool(row.get("icon_path")),
+                           embedding is not None))
 
     for args in queued:
         t = threading.Thread(target=_finish_upload, args=args, daemon=True)
@@ -322,7 +413,31 @@ def upload_images():
     return jsonify({
         "message": f"Uploaded {len(uploaded_items)} file(s). AI tagging running in background.",
         "items": uploaded_items,
+        "duplicates": duplicates,
     }), 200
+
+
+@closet_bp.route("/closet/confirm_upload", methods=["POST"])
+def confirm_upload():
+    """Release an upload that was held back as a possible duplicate."""
+    user_id = get_user_id_from_token(request)
+    if not user_id:
+        return jsonify({"message": "Unauthorized"}), 401
+
+    filename = ((request.get_json(silent=True) or {}).get("filename") or "").strip()
+    if not filename:
+        return jsonify({"message": "Missing filename"}), 400
+
+    row = (get_supa().table("closet_items").select("filepath, icon_path")
+           .eq("user_id", user_id).eq("filename", filename).execute().data or [None])[0]
+    if not row:
+        return jsonify({"message": "Item not found"}), 404
+
+    filepath = row.get("filepath") or os.path.join(UPLOAD_FOLDER, str(user_id), filename)
+    threading.Thread(target=_finish_upload,
+                     args=(filepath, filename, user_id, bool(row.get("icon_path")), True),
+                     daemon=True).start()
+    return jsonify({"message": "Processing started"}), 200
 
 
 @closet_bp.route("/closet/add_from_catalog", methods=["POST"])
@@ -453,7 +568,7 @@ def _ensure_local_file(user_id: int, filename: str) -> str | None:
     return None
 
 
-def _finish_upload(filepath, filename, user_id, has_icon=False):
+def _finish_upload(filepath, filename, user_id, has_icon=False, embedded=False):
     """Everything the upload response does not have to wait for.
 
     Pushing the photo to Storage was 4-9 s of the request on its own, and tag
@@ -480,10 +595,10 @@ def _finish_upload(filepath, filename, user_id, has_icon=False):
     if has_icon:
         print(f"Icon already exists for {filename}, skipping AI pipeline.")
         return
-    _run_ai_pipeline(filepath, filename, user_id, tag_text)
+    _run_ai_pipeline(filepath, filename, user_id, tag_text, embedded=embedded)
 
 
-def _run_ai_pipeline(filepath, filename, user_id, tag_text=""):
+def _run_ai_pipeline(filepath, filename, user_id, tag_text="", embedded=False):
     """Background: GPT-4o icon/tagging → CLIP embedding. FAISS runs only on user request."""
     print(f"AI pipeline starting for {filename}")
     try:
@@ -491,6 +606,9 @@ def _run_ai_pipeline(filepath, filename, user_id, tag_text=""):
     except Exception as e:
         print(f"Icon/GPT pipeline error for {filename}: {e}")
 
+    if embedded:
+        # The upload already made one for the duplicate check.
+        return
     try:
         print(f"Generating CLIP embedding for: {filename}")
         embedding = generate_clip_embedding(filepath)

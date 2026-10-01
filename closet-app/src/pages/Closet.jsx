@@ -24,6 +24,9 @@ function Closet() {
 
   // Metadata modal state
   const [modalQueue, setModalQueue] = useState([]);
+  /* Uploads the server held back because they look like something already in
+     the closet. Nothing has been sent to GPT for these yet. */
+  const [dupeQueue, setDupeQueue] = useState([]);
   const [activeItem, setActiveItem] = useState(null);
   const [nameInput, setNameInput] = useState("");
   const [gptBrandHint, setGptBrandHint] = useState(null);
@@ -136,6 +139,7 @@ function Closet() {
     // which parallel upload finishes first.
     const slots = new Array(toUpload.length).fill(null);
     const failedNames = [];
+    const pendingDupes = [];
 
     await Promise.all(
       toUpload.map(async (file, idx) => {
@@ -149,7 +153,10 @@ function Closet() {
             headers: { ...authHeaders(), "Content-Type": "multipart/form-data" },
           });
           const returned = res.data.items || [];
+          const dupes = res.data.duplicates || {};
           if (returned.length) {
+            const match = dupes[returned[0].filename];
+            if (match) pendingDupes.push({ item: returned[0], match });
             slots[idx] = returned[0];
             // Card appears immediately as each upload finishes
             setItems((prev) =>
@@ -176,6 +183,17 @@ function Closet() {
 
     if (!uploaded.length) return;
 
+    // Ask about the possible duplicates first: those are the only ones whose
+    // processing is still on hold, so a decision there decides what happens.
+    if (pendingDupes.length) {
+      setDupeQueue(pendingDupes);
+      setItems((prev) => {
+        const seen = new Set(prev.map((i) => i.id));
+        return [...prev, ...uploaded.filter((i) => !seen.has(i.id))];
+      });
+      return;
+    }
+
     // Refresh all items once — picks up any AI data that already ran during
     // the parallel uploads, and gives cards their GPT names before modal opens.
     try {
@@ -187,6 +205,35 @@ function Closet() {
       startModalQueue(ordered);
     } catch {
       startModalQueue(uploaded);
+    }
+  };
+
+  /* Keep it: release the processing the server held, and carry on into the
+     normal metadata modal. Drop it: delete the row and the photo with it. */
+  const resolveDupe = async (keep) => {
+    const [current, ...rest] = dupeQueue;
+    if (!current) return;
+    try {
+      if (keep) {
+        await axios.post(`${API}/closet/confirm_upload`,
+                         { filename: current.item.filename },
+                         { headers: authHeaders() });
+      } else {
+        await axios.delete(`${API}/delete_closet_image`, {
+          headers: authHeaders(),
+          params: { filename: current.item.filename },
+        });
+        setItems((prev) => prev.filter((i) => i.id !== current.item.id));
+      }
+    } catch (e) {
+      console.error("Could not resolve that upload:", e);
+    }
+    setDupeQueue(rest);
+    if (!rest.length) {
+      try {
+        const fresh = await axios.get(`${API}/get_closet_images`, { headers: authHeaders() });
+        setItems(fresh.data);
+      } catch { /* the list will catch up on the next load */ }
     }
   };
 
@@ -652,6 +699,62 @@ function Closet() {
           <p>Your closet is empty. Upload some clothing items to get started!</p>
         </div>
       )}
+
+      {/* ── Possible duplicate ──────────────────────────────────────────────── */}
+      {dupeQueue.length > 0 && (() => {
+        const { item, match } = dupeQueue[0];
+        return (
+          <div className="modal-overlay">
+            <div className="modal-box dupe-box" onClick={(e) => e.stopPropagation()}>
+              <h3>
+                Already in your closet?
+                {dupeQueue.length > 1 && (
+                  <span style={{ fontSize: "0.75rem", color: "#8080a8", marginLeft: 10 }}>
+                    {dupeQueue.length - 1} more after this
+                  </span>
+                )}
+              </h3>
+              <p className="dupe-lead">
+                This photo closely matches a piece you already have. Nothing has
+                been processed yet — is it the same thing?
+              </p>
+              <div className="dupe-pair">
+                <figure className="dupe-side">
+                  <img src={photoSrc(item.url)} alt="" />
+                  <figcaption>
+                    <span className="dupe-tag">Just uploaded</span>
+                    <span className="dupe-name">{item.filename}</span>
+                  </figcaption>
+                </figure>
+                <span className="dupe-vs">{Math.round(match.similarity * 100)}% alike</span>
+                <figure className="dupe-side">
+                  <img src={match.thumb_url || match.icon_url || photoSrc(match.url)}
+                       alt=""
+                       onError={(e) => {
+                         const img = e.currentTarget;
+                         if (img.dataset.fellBack) return;
+                         img.dataset.fellBack = "1";
+                         img.src = photoSrc(match.url);
+                       }} />
+                  <figcaption>
+                    <span className="dupe-tag">Already in your closet</span>
+                    <span className="dupe-name">{match.title}</span>
+                    {match.brand && <span className="dupe-brand">{match.brand}</span>}
+                  </figcaption>
+                </figure>
+              </div>
+              <div className="dupe-actions">
+                <button className="dupe-btn dupe-btn--primary" onClick={() => resolveDupe(true)}>
+                  It&apos;s a different piece — add it
+                </button>
+                <button className="dupe-btn" onClick={() => resolveDupe(false)}>
+                  Already have it — remove this
+                </button>
+              </div>
+            </div>
+          </div>
+        );
+      })()}
 
       {/* ── Metadata modal ──────────────────────────────────────────────────── */}
       {activeItem && !faissMatches.length && (
