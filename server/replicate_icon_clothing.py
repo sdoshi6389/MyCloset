@@ -241,6 +241,26 @@ def analyze_image_with_gpt(image_path, tag_text=None):
 
 
 # === Step 2: GPT icon generation (transparent background) =======================
+def build_icon_prompt(caption: str) -> str:
+    """The ghost-mannequin prompt for one garment.
+
+    Lifted out of the pipeline so a repair run regenerates an icon with exactly
+    this prompt instead of a copy that drifts away from it.
+    """
+    return (
+        f"Edit this exact photo into a professional ghost mannequin product image of the {caption}. "
+        "Preserve its exact color, fabric texture, pattern, and any print or logo exactly as photographed "
+        "— do not redraw, illustrate, or stylize; this must remain a photographic edit. "
+        "Remove the background, person, hanger, and all shadows, replacing them with full transparency. "
+        "Give the garment realistic ghost mannequin form: collar/neckline open and shaped as if around "
+        "a neck, shoulders filled to natural body width, torso with genuine 3D body volume and curvature, "
+        "sleeves hanging naturally at the sides. Correct any angle so the garment faces the camera "
+        "straight-on from the front. "
+        "The result should look like a high-end fashion e-commerce product photo on an invisible ghost "
+        "mannequin — photographic realism, not illustration."
+    )
+
+
 def icon_stem_for(user_id, filename: str) -> str:
     """A stable, collision-free name for one closet item's icon.
 
@@ -446,18 +466,7 @@ def generate_icon_from_image(image_path, user_id, filename, tag_text=None, outpu
     if not caption:
         caption = filename.rsplit(".", 1)[0].replace("_", " ").replace("-", " ").strip() or "clothing item"
 
-    icon_prompt = (
-        f"Edit this exact photo into a professional ghost mannequin product image of the {caption}. "
-        "Preserve its exact color, fabric texture, pattern, and any print or logo exactly as photographed "
-        "— do not redraw, illustrate, or stylize; this must remain a photographic edit. "
-        "Remove the background, person, hanger, and all shadows, replacing them with full transparency. "
-        "Give the garment realistic ghost mannequin form: collar/neckline open and shaped as if around "
-        "a neck, shoulders filled to natural body width, torso with genuine 3D body volume and curvature, "
-        "sleeves hanging naturally at the sides. Correct any angle so the garment faces the camera "
-        "straight-on from the front. "
-        "The result should look like a high-end fashion e-commerce product photo on an invisible ghost "
-        "mannequin — photographic realism, not illustration."
-    )
+    icon_prompt = build_icon_prompt(caption)
 
     # ── Step 2: GPT icon generation (transparent background) ────────────────
     icon_path = None
