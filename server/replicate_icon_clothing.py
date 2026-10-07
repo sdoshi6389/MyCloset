@@ -175,14 +175,26 @@ TYPE_TO_CATEGORY = {
 }
 
 def infer_category(type_str):
+    """Map a GPT `type` onto a closet category.
+
+    GPT writes types with underscores -- "graphic_tee", "button_up" -- while the
+    table is keyed with spaces, so neither the exact lookup nor the substring
+    pass matched and the item came back with no category at all. Separators are
+    levelled first.
+
+    Longest key first, so "cargo pants" is not answered by "pants" and
+    "denim jacket" is not answered by "jacket"; both happen to agree today, but
+    the order was accidental rather than chosen.
+    """
     if not type_str:
         return None
-    tl = type_str.lower().strip()
+    tl = re.sub(r"[_\-]+", " ", str(type_str).lower()).strip()
+    tl = re.sub(r"\s+", " ", tl)
     if tl in TYPE_TO_CATEGORY:
         return TYPE_TO_CATEGORY[tl]
-    for key, cat in TYPE_TO_CATEGORY.items():
+    for key in sorted(TYPE_TO_CATEGORY, key=len, reverse=True):
         if key in tl:
-            return cat
+            return TYPE_TO_CATEGORY[key]
     return None
 
 

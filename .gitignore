@@ -55,3 +55,8 @@ jcrew_products_dump.json
 
 # Runtime API cost log (generated, grows on every request)
 server/api_cost_log.jsonl
+
+# Photo sets staged for import, and the archives a wipe leaves behind.
+# Both are hundreds of MB of originals that belong on disk, not in history.
+MyCloset/
+server/closet_archives/
