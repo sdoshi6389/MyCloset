@@ -174,21 +174,20 @@ TYPE_TO_CATEGORY = {
     "athletic leggings": "Bottoms", "trackpant": "Bottoms", "track pants": "Bottoms",
 }
 
-def infer_category(type_str):
-    """Map a GPT `type` onto a closet category.
+def _match_category(text):
+    """Longest garment word in `text` wins, separators levelled first.
 
     GPT writes types with underscores -- "graphic_tee", "button_up" -- while the
-    table is keyed with spaces, so neither the exact lookup nor the substring
-    pass matched and the item came back with no category at all. Separators are
-    levelled first.
+    table is keyed with spaces, so neither an exact lookup nor a naive substring
+    pass matched them.
 
     Longest key first, so "cargo pants" is not answered by "pants" and
     "denim jacket" is not answered by "jacket"; both happen to agree today, but
-    the order was accidental rather than chosen.
+    the order was dict insertion rather than a decision.
     """
-    if not type_str:
+    if not text:
         return None
-    tl = re.sub(r"[_\-]+", " ", str(type_str).lower()).strip()
+    tl = re.sub(r"[_\-]+", " ", str(text).lower()).strip()
     tl = re.sub(r"\s+", " ", tl)
     if tl in TYPE_TO_CATEGORY:
         return TYPE_TO_CATEGORY[tl]
@@ -196,6 +195,21 @@ def infer_category(type_str):
         if key in tl:
             return TYPE_TO_CATEGORY[key]
     return None
+
+
+def infer_category(type_str, text=None):
+    """Which closet section an item belongs in.
+
+    `type` is free-form, and GPT often answers it with a fabric or a vibe --
+    "denim", "athletic", "sportswear", "crewneck" -- none of which say where the
+    garment lives, and some of which are actively ambiguous: bare "denim" is
+    jeans about as often as it is a jacket.
+
+    The caption it wrote alongside almost always names the garment itself
+    ("Blue denim jeans", "Gray zip-up hoodie", "basketball jersey"), so that is
+    the fallback rather than a guess at what the bare word meant.
+    """
+    return _match_category(type_str) or _match_category(text)
 
 
 def encode_image_to_base64(image_path):
@@ -459,7 +473,7 @@ def generate_icon_from_image(image_path, user_id, filename, tag_text=None, outpu
     try:
         gpt_tags = analyze_image_with_gpt(image_path, tag_text=tag_text)
         caption  = gpt_tags.get("caption", "") or ""
-        category = infer_category(gpt_tags.get("type"))
+        category = infer_category(gpt_tags.get("type"), caption)
         print(f"✅ GPT: caption='{caption}' | type={gpt_tags.get('type')} → category={category}")
         print(f"🏷️  brand='{gpt_tags.get('brand')}' | back_tag='{gpt_tags.get('back_tag_text')}'")
     except Exception as e:
@@ -520,7 +534,7 @@ def retag_metadata_only(image_path, user_id, filename, tag_text=None):
     """
     try:
         gpt_tags = analyze_image_with_gpt(image_path, tag_text=tag_text)
-        category = infer_category(gpt_tags.get("type"))
+        category = infer_category(gpt_tags.get("type"), gpt_tags.get("caption"))
         _save_to_db(user_id, filename, icon_path=None, gpt_tags=gpt_tags, category=category)
         print(f"✅ Retag: {filename} → subcat={gpt_tags.get('subcategory')} layer={gpt_tags.get('layering_role')}")
         return True
