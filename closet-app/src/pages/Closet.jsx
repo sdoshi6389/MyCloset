@@ -7,6 +7,7 @@ import "./Closet.css";
 
 import { API_BASE as API, iconSrc, thumbSrc, photoSrc, fallbackToIcon } from "../config";
 import { shrinkForUpload } from "../lib/shrinkImage";
+import { matchesQuery } from "../lib/searchItems";
 import { motion } from "framer-motion";
 
 // ClosetItemCard is a sibling component, so the parent's authHeaders is
@@ -44,6 +45,7 @@ function Closet() {
   const [uploading, setUploading] = useState(false);
   const [uploadProgress, setUploadProgress] = useState(null); // { done, total } | null
   const [activeCategory, setActiveCategory] = useState("All");
+  const [query, setQuery] = useState("");
   const [activeSubcategory, setActiveSubcategory] = useState(null);
 
   const MAX_UPLOADS = 8;
@@ -545,9 +547,11 @@ function Closet() {
       )].sort()
     : [];
 
+  const searched = query ? items.filter((it) => matchesQuery(it, query)) : items;
+
   const grouped = {};
   (activeCategory === "All" ? [...categories, "Uncategorized"] : [activeCategory]).forEach((cat) => {
-    let group = items.filter((it) =>
+    let group = searched.filter((it) =>
       cat === "Uncategorized"
         ? !it.category || !categories.includes(it.category)
         : it.category === cat
@@ -613,6 +617,21 @@ function Closet() {
 
       {/* ── Category filter tabs ────────────────────────────────────────────── */}
       <div className="closet-cat-tabs">
+        <div className="closet-search">
+          <input
+            className="closet-search-input"
+            type="search"
+            value={query}
+            placeholder="Search by name, brand, colour…"
+            onChange={(e) => setQuery(e.target.value)}
+            aria-label="Search your closet"
+          />
+          {query && (
+            <span className="closet-search-count">
+              {Object.values(grouped).reduce((n, g) => n + g.length, 0)} of {items.length}
+            </span>
+          )}
+        </div>
         {["All", ...categories].map((cat) => (
           <button
             key={cat}
@@ -1019,7 +1038,7 @@ function ClosetItemCard({ item, index = 0, ownedByMe, ownerInitial, onZoom, onEd
           {item.matched_title || item.caption || item.type || "—"}
         </p>
         <p className="closet-card-brand">
-          {item.brand || "Unknown"}
+          {item.brand || "\u2014"}
         </p>
         <div className="closet-card-tags">
           {item.subcategory

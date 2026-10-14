@@ -1777,3 +1777,28 @@
 .pb-btn-hist + .pb-btn-hist { border-left: 1px solid rgba(255,255,255,0.1); }
 .pb-btn-hist:hover:not(:disabled) { background: rgba(167,139,250,0.2); color: var(--accent); }
 .pb-btn-hist:disabled { opacity: 0.3; cursor: default; }
+
+/* ── Rail search ──────────────────────────────────────────────────────────
+   Ninety-odd pieces is more than anyone scrolls through to find one shirt. */
+.pb-rail-search {
+  padding: 8px 14px 4px;
+  box-sizing: border-box;
+}
+.pb-rail-search-input {
+  width: 100%;
+  max-width: 280px;
+  padding: 6px 11px;
+  border-radius: 999px;
+  border: 1px solid rgba(255,255,255,0.1);
+  background: rgba(255,255,255,0.04);
+  color: var(--text, #fff);
+  font-size: 12.5px;
+  font-family: inherit;
+  box-sizing: border-box;
+}
+.pb-rail-search-input::placeholder { color: rgba(255,255,255,0.33); }
+.pb-rail-search-input:focus {
+  outline: none;
+  border-color: var(--accent, #a78bfa);
+  background: rgba(255,255,255,0.07);
+}

@@ -6,6 +6,7 @@ import { useCircle } from "../context/CircleContext";
 import "./Builder.css";
 
 import { API_BASE, iconSrc, thumbSrc, fallbackToIcon } from "../config";
+import { matchesQuery } from "../lib/searchItems";
 
 // ── Zone definitions ──────────────────────────────────────────────────────────
 // Bracelet zones are intentionally excluded from ZONES — they live in
@@ -255,6 +256,7 @@ export default function Builder() {
   }, []);
 
   const [items, setItems]       = useState([]);
+  const [railQuery, setRailQuery] = useState("");
   /* Catalog pieces that came in with a Discover look. They finish the outfit
      but are not in the closet, so they cannot go on the canvas until they are
      added -- they sit beside it until then. */
@@ -968,9 +970,9 @@ export default function Builder() {
   const onLeave = () => setHovered(null);
 
   // ── Item grouping ─────────────────────────────────────────────────────────
-  const myItems = items.filter((it) => it.is_mine);
+  const myItems = items.filter((it) => it.is_mine && matchesQuery(it, railQuery));
   const byOwner = {};
-  for (const it of items.filter((it) => !it.is_mine)) {
+  for (const it of items.filter((it) => !it.is_mine && matchesQuery(it, railQuery))) {
     const key = it.owner_email || "Unknown";
     (byOwner[key] = byOwner[key] || []).push(it);
   }
@@ -1357,6 +1359,16 @@ export default function Builder() {
           <span className="pb-rail-resizer-grip" />
         </div>
         <div className="pb-rail" style={{ height: railH }}>
+          <div className="pb-rail-search">
+            <input
+              className="pb-rail-search-input"
+              type="search"
+              value={railQuery}
+              placeholder="Find a piece…"
+              onChange={(e) => setRailQuery(e.target.value)}
+              aria-label="Search your closet"
+            />
+          </div>
           <div className="pb-rail-track">
             {myItemsByCategory.map(({ label, items: groupItems }) => (
               <div key={label} className="pb-rail-section">

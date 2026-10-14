@@ -52,6 +52,7 @@ Return the following JSON schema:
   "caption": string,
   "back_tag_text": string | null,
   "brand": string | null,
+  "size": string | null,
 
   "category": string,
   "subcategory": string,
@@ -132,7 +133,9 @@ season: Can contain multiple values, e.g. ["spring","summer"] or ["fall","winter
 recommended_pairings: Generic clothing pairings that work well with this item.
 Example: ["light_wash_jeans", "white_sneakers", "silver_chain"]
 
-brand: Extract the brand name from any visible tag, label, logo, or text on the garment. Use back_tag_text to identify it. Return null if no brand is visible.
+brand: Extract the brand name from any visible tag, label, logo, or text on the garment. Use back_tag_text to identify it. Return ONLY a real brand name — never a size, a care instruction, a fabric, or an unreadable fragment. Return null if no brand is legible.
+
+size: The garment size from the size or care label if legible — XS, S, M, L, XL, XXL, a numeric size like 32x30 or 10, or "One Size". Return null if no size is visible. Never put a size in the brand field.
 
 compatible_styles: e.g. ["streetwear", "minimalist", "casual"]
 
@@ -409,9 +412,15 @@ def _serialize(val):
 
 # === Step 3: DB write ===========================================================
 def _save_to_db(user_id, filename, icon_path, gpt_tags, category):
+    from garment_text import clean_brand, normalise_size
+
     caption        = gpt_tags.get("caption") or ""
     back_tag       = gpt_tags.get("back_tag_text") or ""
-    brand          = gpt_tags.get("brand") or back_tag or "Unknown"
+    # The raw tag used to stand in for a missing brand, which is how "M/L",
+    # "G8" and "1" became brands -- that text is whatever OCR made of a care
+    # label. It is still worth a look, but only once it reads like a name.
+    brand          = clean_brand(gpt_tags.get("brand")) or clean_brand(back_tag)
+    size           = normalise_size(gpt_tags.get("size")) or normalise_size(back_tag)
     item_type      = gpt_tags.get("type")
     color          = gpt_tags.get("primary_color") or gpt_tags.get("color")
     style          = _serialize(gpt_tags.get("style"))
@@ -435,7 +444,7 @@ def _save_to_db(user_id, filename, icon_path, gpt_tags, category):
 
     # Fetch current row so we can COALESCE in Python (don't overwrite existing values)
     existing_res = supa.table("closet_items").select(
-        "icon_path, caption, brand, type, color, style, season, fabric, vibe, gender, keywords, category, matched_title, occasion, formality_score, subcategory, layering_role"
+        "icon_path, caption, brand, size, type, color, style, season, fabric, vibe, gender, keywords, category, matched_title, occasion, formality_score, subcategory, layering_role"
     ).eq("user_id", user_id).eq("filename", filename).execute()
     ex = existing_res.data[0] if existing_res.data else {}
 
@@ -446,6 +455,7 @@ def _save_to_db(user_id, filename, icon_path, gpt_tags, category):
         "icon_path":      _coalesce(icon_path,       ex.get("icon_path")),
         "caption":        _coalesce(caption,         ex.get("caption")),
         "brand":          _coalesce(brand,           ex.get("brand")),
+        "size":           _coalesce(size,            ex.get("size")),
         "type":           _coalesce(item_type,       ex.get("type")),
         "matched_title":  _coalesce(item_name,       ex.get("matched_title")),
         "color":          _coalesce(color,           ex.get("color")),
