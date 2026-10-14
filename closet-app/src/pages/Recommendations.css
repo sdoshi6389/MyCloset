@@ -155,7 +155,7 @@
   display: flex;
   flex-direction: column;
   align-items: center;
-  gap: 2px;
+  gap: 5px;
   padding: var(--space-4) var(--space-3) var(--space-3);
   min-height: 290px;
   background: radial-gradient(120% 70% at 50% 0%,
@@ -170,7 +170,7 @@
 .rec-stack-row img {
   width: 100%;
   height: 100%;
-  max-height: 126px;
+  max-height: 129px;
   object-fit: contain;
   box-sizing: border-box;      /* no global border-box reset in this project */
   filter: drop-shadow(0 6px 14px rgba(0,0,0,0.5));
@@ -184,15 +184,20 @@
    t-shirt above them. Real trousers are around one and a half times a top, and
    shorts are shorter than one -- the old rules had no way to say that, since
    shorts arrive in the same slot as trousers. */
-.rec-stack-row--hat          img { max-height: 40px; }
+/* Taken from how long the garments actually are, with a t-shirt at 70cm as the
+   unit: jeans 105, sweatpants 103, a jacket 75, a vest 62, shorts 45. The first
+   pass guessed, and shorts came out at 0.88 of a t-shirt when they should be
+   0.64 -- which is why a henley over shorts looked wrong while jeans looked
+   fine. */
+.rec-stack-row--hat          img { max-height: 38px; }
 .rec-stack-row--necklace     img { max-height: 26px; }
-.rec-stack-row--outer_top    img { max-height: 98px; }
+.rec-stack-row--outer_top    img { max-height: 92px; }
 .rec-stack-row--inner_top    img { max-height: 86px; }
-.rec-stack-row--innerwear    img { max-height: 78px; }
-.rec-stack-row--inner_bottom img { max-height: 126px; }
-.rec-stack-row--shorts       img { max-height: 76px; }
-.rec-stack-row--outer_bottom img { max-height: 108px; }
-.rec-stack-row--left_shoe    img { max-height: 40px; }
+.rec-stack-row--innerwear    img { max-height: 76px; }
+.rec-stack-row--inner_bottom img { max-height: 129px; }
+.rec-stack-row--shorts       img { max-height: 55px; }
+.rec-stack-row--outer_bottom img { max-height: 100px; }
+.rec-stack-row--left_shoe    img { max-height: 38px; }
 
 .rec-stack-blank {
   width: 100%;

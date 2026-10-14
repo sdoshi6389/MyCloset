@@ -312,6 +312,37 @@ def icon_stem_for(user_id, filename: str) -> str:
     return f"{user_id}_{safe}_{digest}"
 
 
+def _stamp_with_content(path: str) -> str:
+    """Rename a finished icon so its name depends on its pixels.
+
+    Icons are served with a day-long cache, and a regenerated icon used to keep
+    its filename, so the fix stayed invisible to anyone who had already loaded
+    the old one. Putting a hash of the bytes in the name makes a changed icon a
+    different URL, which no cache can get wrong. The previous file is left where
+    it is; nothing points at it any more.
+    """
+    try:
+        with open(path, "rb") as f:
+            digest = hashlib.sha1(f.read()).hexdigest()[:8]
+    except OSError:
+        return path
+    base, ext = os.path.splitext(path)
+    # Replace an existing stamp rather than stacking a new one on top. The
+    # marker is ".v" because Supabase Storage rejects a key containing "~" --
+    # it answers InvalidKey and the upload never lands.
+    base = re.sub(r"[.~]v?[0-9a-f]{8}$", "", base)
+    stamped = f"{base}.v{digest}{ext}"
+    if os.path.normcase(stamped) == os.path.normcase(path):
+        return path
+    try:
+        if os.path.exists(stamped):
+            os.remove(stamped)
+        os.replace(path, stamped)
+        return stamped
+    except OSError:
+        return path
+
+
 def generate_icon_via_gpt(icon_prompt, source_image_path=None, output_dir=ICON_OUTPUTS_DIR,
                           icon_stem=None):
     """
@@ -345,8 +376,9 @@ def generate_icon_via_gpt(icon_prompt, source_image_path=None, output_dir=ICON_O
             raise ValueError(f"No image data in {label} response")
         img = Image.open(BytesIO(img_bytes))
         img.save(out_path, "PNG")
-        print(f"✅ {label} icon saved: {out_path}")
-        return out_path
+        stamped = _stamp_with_content(out_path)
+        print(f"✅ {label} icon saved: {stamped}")
+        return stamped
 
     # ── Try gpt-image-1 image-edit: extracts + re-poses the ACTUAL photo ─────
     if source_image_path:
@@ -394,8 +426,9 @@ def generate_icon_via_gpt(icon_prompt, source_image_path=None, output_dir=ICON_O
         img = Image.open(BytesIO(img_bytes))
         log_image_cost("dall-e-3", size="1024x1024", fidelity=None, call_type="image_generate", context="icon_fallback_dalle3")
         img.save(out_path, "PNG")
-        print(f"✅ DALL-E 3 icon saved (opaque fallback, no source extraction): {out_path}")
-        return out_path
+        stamped = _stamp_with_content(out_path)
+        print(f"✅ DALL-E 3 icon saved (opaque fallback, no source extraction): {stamped}")
+        return stamped
     except Exception as e:
         print(f"⚠️  DALL-E 3 fallback failed ({type(e).__name__}): {e}")
         return None
