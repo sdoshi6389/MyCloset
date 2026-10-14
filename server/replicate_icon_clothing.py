@@ -278,10 +278,19 @@ def build_icon_prompt(caption: str) -> str:
         "Preserve its exact color, fabric texture, pattern, and any print or logo exactly as photographed "
         "— do not redraw, illustrate, or stylize; this must remain a photographic edit. "
         "Remove the background, person, hanger, and all shadows, replacing them with full transparency. "
-        "Give the garment realistic ghost mannequin form: collar/neckline open and shaped as if around "
-        "a neck, shoulders filled to natural body width, torso with genuine 3D body volume and curvature, "
-        "sleeves hanging naturally at the sides. Correct any angle so the garment faces the camera "
-        "straight-on from the front. "
+        "Give the garment ghost mannequin form: collar/neckline open and shaped as if around a neck, "
+        "shoulders filled to natural width, torso holding a gentle three-dimensional shape that follows "
+        "the garment's own cut, sleeves hanging naturally at the sides. "
+        # "3D body volume and curvature" was reading as an instruction to draw the
+        # body, not the garment. On anything loose it was hidden; on a fitted
+        # ribbed tank it produced a bust and a waist, so eight tank tops came out
+        # shaped like a torso while nothing else did.
+        "Do not draw a body inside the garment: no bust, no chest or waist contouring, no suggestion of "
+        "a figure. The fabric should hold its own shape as it would on a plain invisible form, and the "
+        "silhouette must stay the garment's own -- a straight vest stays straight. "
+        "Keep the chest and front panel flat and even, with no rounding and no shadow that implies a "
+        "chest beneath the fabric. "
+        "Correct any angle so the garment faces the camera straight-on from the front. "
         "The result should look like a high-end fashion e-commerce product photo on an invisible ghost "
         "mannequin — photographic realism, not illustration."
     )

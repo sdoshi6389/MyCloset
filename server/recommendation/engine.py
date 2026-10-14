@@ -143,6 +143,10 @@ def _format_closet_item(row: dict, user_id: int, scored: dict, reason: str) -> d
         "brand":           row.get("brand"),
         "color":           row.get("color"),
         "category":        row.get("category"),
+        # Shorts and trousers share the inner_bottom slot, so a card that only
+        # knows the slot has to draw them the same length. These say which.
+        "type":            row.get("type"),
+        "subcategory":     row.get("subcategory"),
         "icon_url":        _icon_full,
         "thumb_url":       _icon_thumb,
         "image_url":       public_url(f"{user_id}/{row['filename']}"),

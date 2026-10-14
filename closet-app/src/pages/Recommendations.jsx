@@ -12,6 +12,20 @@ const LS_LOC = "rec_location";
 
 /* Painted top to bottom so a card reads as a person wearing the look rather
    than a row of unrelated products. Widths are relative to the card. */
+/* Shorts and trousers both fill the inner_bottom slot, and every icon is drawn
+   with the garment filling its frame, so drawing both at the slot's height made
+   a pair of shorts as long as a pair of jeans. This picks the row's real shape
+   out of the garment's own words. */
+const SHORTS_RE = /\b(shorts?|trunks|boardshorts|bermudas?)\b/i;
+
+function rowKind(slot, item) {
+  if (slot === "inner_bottom"
+      && SHORTS_RE.test(`${item?.type || ""} ${item?.subcategory || ""} ${item?.title || ""}`)) {
+    return "shorts";
+  }
+  return slot;
+}
+
 const STACK = [
   { slot: "hat",          w: 40 },
   { slot: "necklace",     w: 30 },
@@ -74,7 +88,7 @@ function OutfitStack({ items, accessories, showAccessories }) {
         return (
           <motion.div
             key={slot}
-            className={`rec-stack-row rec-stack-row--${slot}`}
+            className={`rec-stack-row rec-stack-row--${rowKind(slot, item)}`}
             style={{ width: `${w}%` }}
             layout
             initial={{ opacity: 0, scale: 0.9 }}
