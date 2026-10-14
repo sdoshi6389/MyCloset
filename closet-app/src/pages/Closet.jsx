@@ -17,6 +17,37 @@ import { cardTint, cardTintHover, colorEdge } from "../lib/colorFamily";
 
 const DEFAULT_CATEGORIES = ["Tops", "Bottoms", "Outerwear", "Innerwear", "Accessories", "Shoes"];
 
+/* The attributes worth reading at a glance. These were buried in a hover
+   popover that covered the next card along; the modal has room for them and is
+   where someone goes when they actually want the detail. */
+function itemFacts(item) {
+  const clean = (v) => (typeof v === "string"
+    ? v.replace(/[\[\]'"]/g, "").replace(/_/g, " ").trim()
+    : Array.isArray(v) ? v.join(", ") : v);
+  return [
+    ["Type",      clean(item.subcategory || item.type)],
+    ["Category",  clean(item.category)],
+    ["Colour",    clean(item.color)],
+    ["Size",      clean(item.size)],
+    ["Fabric",    clean(item.fabric)],
+    ["Layer",     clean(item.layering_role)],
+    ["Season",    clean(item.season)],
+    ["Style",     clean(item.style)],
+    ["Occasion",  clean(item.occasion)],
+    ["Vibe",      clean(item.vibe)],
+    ["Formality", item.formality_score ? `${item.formality_score}/10` : null],
+  ].filter(([, v]) => v !== null && v !== undefined && v !== "");
+}
+
+function itemKeywords(item) {
+  const k = item.keywords;
+  if (Array.isArray(k)) return k;
+  if (typeof k === "string" && k) {
+    return k.replace(/[\[\]'"]/g, "").split(",").map((x) => x.trim()).filter(Boolean);
+  }
+  return [];
+}
+
 function Closet() {
   const [items, setItems] = useState([]);
   const [categories, setCategories] = useState(DEFAULT_CATEGORIES);
@@ -778,24 +809,56 @@ function Closet() {
       {/* ── Metadata modal ──────────────────────────────────────────────────── */}
       {activeItem && !faissMatches.length && (
         <div className="modal-overlay" onClick={() => { stopBrandPoll(); stopEmbedPoll(); setActiveItem(null); }}>
-          <div className="modal-box" onClick={(e) => e.stopPropagation()}>
-            <h3>
-              {activeItem.filename}
-              {modalQueue.length > 0 && (
-                <span style={{ fontSize: "0.75rem", color: "#8080a8", marginLeft: 10 }}>
-                  {modalQueue.length} more after this
-                </span>
-              )}
-            </h3>
+          <div className="modal-box item-modal" onClick={(e) => e.stopPropagation()}>
+            <div className="im-head">
+              <h3 className="im-title">
+                {activeItem.matched_title || activeItem.caption || activeItem.filename}
+              </h3>
+              <div className="im-sub">
+                {activeItem.brand && <span className="im-brand">{activeItem.brand}</span>}
+                <span className="im-file">{activeItem.filename}</span>
+                {modalQueue.length > 0 && (
+                  <span className="im-queue">{modalQueue.length} more after this</span>
+                )}
+              </div>
+            </div>
 
-            {activeItem.icon_path && (
-              <img
-                src={iconSrc(activeItem.icon_path)}
-                alt="icon"
-                className="modal-item-icon"
-              />
-            )}
+            <div className="im-body">
+              <div className="im-left">
+                {activeItem.icon_path && (
+                  <img src={iconSrc(activeItem.icon_path)} alt="" className="im-icon" />
+                )}
+                <div className="im-stats">
+                  <span className={`im-stat${activeItem.in_laundry ? " im-stat--on" : ""}`}>
+                    {activeItem.in_laundry ? "In the wash" : "Clean"}
+                  </span>
+                  <span className="im-stat">Worn {activeItem.wear_count || 0}&times;</span>
+                  {activeItem.last_worn && (
+                    <span className="im-stat">
+                      Last {new Date(activeItem.last_worn).toLocaleDateString()}
+                    </span>
+                  )}
+                </div>
+                {itemFacts(activeItem).length > 0 && (
+                  <dl className="im-facts">
+                    {itemFacts(activeItem).map(([k, v]) => (
+                      <div className="im-fact" key={k}>
+                        <dt>{k}</dt>
+                        <dd>{v}</dd>
+                      </div>
+                    ))}
+                  </dl>
+                )}
+                {itemKeywords(activeItem).length > 0 && (
+                  <div className="im-keywords">
+                    {itemKeywords(activeItem).slice(0, 10).map((k, i) => (
+                      <span className="im-keyword" key={i}>{k}</span>
+                    ))}
+                  </div>
+                )}
+              </div>
 
+              <div className="im-right">
             <div className="field-group">
               <label className="field-label">Name</label>
               <input className="field-input" value={nameInput} onChange={(e) => setNameInput(e.target.value)} placeholder="e.g. Ripstop Trackpant" />
@@ -828,20 +891,23 @@ function Closet() {
               </select>
             </div>
 
-            <div className="modal-action-row">
-              <button className="btn-primary" onClick={handleSave}>Save</button>
-              {activeItem.has_embedding && (
-                <button className="btn-secondary" onClick={handleFindMatch}>Find Match</button>
-              )}
-              <button className="btn-secondary" onClick={() => { stopBrandPoll(); setActiveItem(null); }} style={{ marginLeft: "auto" }}>Cancel</button>
+                <div className="modal-action-row">
+                  <button className="btn-primary" onClick={handleSave}>Save</button>
+                  {activeItem.has_embedding && (
+                    <button className="btn-secondary" onClick={handleFindMatch}>Find Match</button>
+                  )}
+                  <button className="btn-secondary"
+                          onClick={() => { stopBrandPoll(); setActiveItem(null); }}
+                          style={{ marginLeft: "auto" }}>Cancel</button>
+                </div>
+                <p className="modal-action-hint">
+                  {activeItem.has_embedding
+                    ? <><strong>Find Match</strong> searches the product database for a similar item.</>
+                    : <>Product matching becomes available once the AI finishes processing this item.</>
+                  }
+                </p>
+              </div>
             </div>
-            <p className="modal-action-hint">
-              <strong>Save</strong> stores brand/size/category.
-              {activeItem.has_embedding
-                ? <>&nbsp;<strong>Find Match</strong> searches the product database for a similar item.</>
-                : <>&nbsp;Product matching becomes available once the AI finishes processing this item.</>
-              }
-            </p>
           </div>
         </div>
       )}
@@ -937,6 +1003,7 @@ function ClosetItemCard({ item, index = 0, ownedByMe, ownerInitial, onZoom, onEd
   const [wearCount, setWearCount] = useState(item.wear_count || 0);
   const [inLaundry, setInLaundry] = useState(Boolean(item.in_laundry));
   const [wearBusy, setWearBusy]   = useState(false);
+  const [menuOpen, setMenuOpen]   = useState(false);
 
   useEffect(() => { setWearCount(item.wear_count || 0); }, [item.wear_count]);
   useEffect(() => { setInLaundry(Boolean(item.in_laundry)); }, [item.in_laundry]);
@@ -1004,12 +1071,8 @@ function ClosetItemCard({ item, index = 0, ownedByMe, ownerInitial, onZoom, onEd
       transition={{ duration: 0.62, ease: [0.22, 1, 0.36, 1], delay: Math.min(index * 0.05, 0.7) }}
       whileHover={{ y: -8, transition: { duration: 0.22, ease: [0.22, 1, 0.36, 1] } }}
       onMouseEnter={handleMouseEnter}
-      onMouseLeave={() => { setHovered(false); setHoverPos(null); }}
+      onMouseLeave={() => { setHovered(false); setHoverPos(null); setMenuOpen(false); }}
     >
-      {hovered && hasGptData && hoverPos && (
-        <ItemHoverCard item={item} iconUrl={thumbUrl || iconUrl} pos={hoverPos} />
-      )}
-
       <div className={`closet-card-image${imgLoaded ? "" : " closet-card-image--loading"}`} onClick={onZoom}>
         <img
           src={thumbUrl || photoSrc(item.url)}
@@ -1031,6 +1094,39 @@ function ClosetItemCard({ item, index = 0, ownedByMe, ownerInitial, onZoom, onEd
             {wearCount}x
           </span>
         )}
+
+        {/* Logging a wear is the thing done most, so it is the one button that
+            is always there. The rest sit behind the menu rather than crowding
+            the card -- four buttons used to cover the item's own name. */}
+        {ownedByMe !== false && (
+          <div className="cc-actions" onClick={(e) => e.stopPropagation()}>
+            <button className="cc-act cc-act--wear" onClick={markWorn} disabled={wearBusy}
+                    title="I wore this today" aria-label="I wore this today">
+              <span className="cc-act-glyph">✓</span>
+              <span className="cc-act-text">Wore it</span>
+            </button>
+            <div className="cc-menu-wrap">
+              <button className="cc-act cc-act--more" onClick={() => setMenuOpen((v) => !v)}
+                      title="More" aria-label="More actions" aria-expanded={menuOpen}>⋯</button>
+              {menuOpen && (
+                <div className="cc-menu" onMouseLeave={() => setMenuOpen(false)}>
+                  <button onClick={(e) => { setMenuOpen(false); toggleLaundry(e); }}
+                          disabled={wearBusy}>
+                    {inLaundry ? "Take out of the wash" : "Put in the wash"}
+                  </button>
+                  <button onClick={() => { setMenuOpen(false); onEdit(); }}>Edit details</button>
+                  <button className="cc-menu-danger"
+                          onClick={() => {
+                            setMenuOpen(false);
+                            if (window.confirm(`Delete "${item.matched_title || item.caption || item.filename}" from your closet? This cannot be undone.`)) onDelete();
+                          }}>
+                    Delete
+                  </button>
+                </div>
+              )}
+            </div>
+          </div>
+        )}
       </div>
 
       <div className="closet-card-body">
@@ -1048,78 +1144,9 @@ function ClosetItemCard({ item, index = 0, ownedByMe, ownerInitial, onZoom, onEd
           {item.size && <span className="closet-tag-chip">Size {item.size}</span>}
           {item.color && <span className="closet-tag-chip">{item.color}</span>}
         </div>
-        {ownedByMe !== false && (
-          <div className="closet-card-actions">
-            <button
-              className={`closet-wear-btn${inLaundry ? " closet-wear-btn--on" : ""}`}
-              onClick={toggleLaundry}
-              disabled={wearBusy}
-              title={inLaundry ? "Take out of the laundry" : "Mark as in the laundry"}
-            >
-              {inLaundry ? "Washed" : "Laundry"}
-            </button>
-            <button className="closet-wear-btn" onClick={markWorn} disabled={wearBusy}
-                    title="Count one wear">
-              Worn
-            </button>
-            <button className="btn-secondary" style={{ fontSize: "0.78rem", padding: "5px 10px" }} onClick={onEdit}>
-              Edit
-            </button>
-            <button className="btn-danger" onClick={onDelete}>Delete</button>
-          </div>
-        )}
+
       </div>
     </motion.div>
-  );
-}
-
-function ItemHoverCard({ item, iconUrl, pos }) {
-  const tags = [
-    { label: "Type",     value: item.subcategory ? item.subcategory.replace(/_/g, " ") : item.type },
-    { label: "Layer",    value: item.layering_role ? item.layering_role.replace(/_/g, " ") : null },
-    { label: "Color",    value: item.color },
-    { label: "Style",    value: item.style },
-    { label: "Season",   value: item.season },
-    { label: "Fabric",   value: item.fabric },
-    { label: "Vibe",     value: item.vibe },
-    { label: "Gender",   value: item.gender },
-  ].filter((t) => t.value);
-
-  const keywords = Array.isArray(item.keywords)
-    ? item.keywords
-    : typeof item.keywords === "string" && item.keywords
-    ? item.keywords.replace(/[\[\]'"]/g, "").split(",").map((k) => k.trim()).filter(Boolean)
-    : [];
-
-  return createPortal(
-    <div className="item-hover-card" style={{ left: pos.x, top: pos.y }}>
-      {(iconUrl || item.caption) && (
-        <div className="ihc-top">
-          {iconUrl && <img src={iconUrl} alt="icon" className="ihc-icon" />}
-          {item.caption && <p className="ihc-caption">{item.caption}</p>}
-        </div>
-      )}
-
-      {tags.length > 0 && (
-        <div className="ihc-tag-grid">
-          {tags.map(({ label, value }) => (
-            <div key={label} className="ihc-tag-row">
-              <span className="ihc-tag-label">{label}</span>
-              <span className="ihc-tag-value">{value}</span>
-            </div>
-          ))}
-        </div>
-      )}
-
-      {keywords.length > 0 && (
-        <div className="ihc-keywords">
-          {keywords.slice(0, 8).map((k, i) => (
-            <span key={i} className="ihc-keyword-chip">{k}</span>
-          ))}
-        </div>
-      )}
-    </div>,
-    document.body
   );
 }
 

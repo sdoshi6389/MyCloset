@@ -633,3 +633,162 @@
   background: linear-gradient(90deg, transparent, rgba(20,18,28,0.95) 30%);
   padding-left: 14px;
 }
+
+/* ── Card actions ─────────────────────────────────────────────────────────
+   Over the image, where there is nothing to cover. Four buttons used to sit
+   in the body and land exactly on the item's own name. */
+.cc-actions {
+  position: absolute;
+  top: 8px;
+  right: 8px;
+  z-index: 4;
+  display: flex;
+  gap: 6px;
+  opacity: 0;
+  transform: translateY(-4px);
+  transition: opacity 0.18s ease, transform 0.18s ease;
+}
+.closet-card:hover .cc-actions,
+.closet-card:focus-within .cc-actions { opacity: 1; transform: translateY(0); }
+
+.cc-act {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  border: 1px solid rgba(255,255,255,0.14);
+  background: rgba(14,13,19,0.86);
+  backdrop-filter: blur(8px);
+  color: var(--text, #fff);
+  font-size: 11.5px;
+  font-family: inherit;
+  padding: 5px 9px;
+  border-radius: 999px;
+  cursor: pointer;
+  line-height: 1;
+  transition: background 0.16s ease, border-color 0.16s ease;
+}
+.cc-act:hover:not(:disabled) {
+  background: rgba(167,139,250,0.26);
+  border-color: var(--accent, #a78bfa);
+}
+.cc-act:disabled { opacity: 0.5; cursor: default; }
+.cc-act-glyph { font-size: 11px; opacity: 0.85; }
+.cc-act--more { padding: 5px 8px; font-size: 14px; }
+
+.cc-menu-wrap { position: relative; }
+.cc-menu {
+  position: absolute;
+  top: calc(100% + 6px);
+  right: 0;
+  z-index: 6;
+  min-width: 182px;
+  display: flex;
+  flex-direction: column;
+  padding: 5px;
+  border-radius: 12px;
+  border: 1px solid rgba(255,255,255,0.1);
+  background: rgba(16,15,22,0.97);
+  backdrop-filter: blur(12px);
+  box-shadow: 0 14px 34px rgba(0,0,0,0.55);
+  box-sizing: border-box;
+}
+.cc-menu button {
+  text-align: left;
+  background: none;
+  border: none;
+  color: var(--text, #fff);
+  font-size: 12.5px;
+  font-family: inherit;
+  padding: 8px 10px;
+  border-radius: 8px;
+  cursor: pointer;
+}
+.cc-menu button:hover { background: rgba(255,255,255,0.08); }
+.cc-menu-danger { color: #ff8a8a; }
+.cc-menu-danger:hover { background: rgba(255,90,90,0.14); }
+
+/* ── Item modal ───────────────────────────────────────────────────────────
+   Two columns: what the item is on the left, what you can change on the right.
+   It used to show four editable fields and none of the twenty attributes the
+   item actually carries. */
+.item-modal { max-width: 760px; width: calc(100vw - 48px); }
+
+.im-head { margin-bottom: 18px; }
+.im-title {
+  margin: 0 0 4px;
+  font-size: 1.15rem;
+  line-height: 1.3;
+  color: var(--text, #fff);
+}
+.im-sub {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 10px;
+  font-size: 11.5px;
+  color: var(--text-dim, rgba(255,255,255,0.45));
+}
+.im-brand { color: var(--accent, #a78bfa); font-weight: 600; }
+.im-file { opacity: 0.7; }
+.im-queue { margin-left: auto; }
+
+.im-body { display: grid; grid-template-columns: 236px 1fr; gap: 26px; align-items: start; }
+
+.im-icon {
+  width: 100%;
+  aspect-ratio: 1;
+  object-fit: contain;
+  border-radius: 14px;
+  background: rgba(255,255,255,0.035);
+  border: 1px solid rgba(255,255,255,0.06);
+  box-sizing: border-box;
+}
+
+.im-stats { display: flex; flex-wrap: wrap; gap: 6px; margin: 12px 0 14px; }
+.im-stat {
+  font-size: 10.5px;
+  padding: 4px 9px;
+  border-radius: 999px;
+  background: rgba(255,255,255,0.06);
+  color: var(--text-dim, rgba(255,255,255,0.6));
+}
+.im-stat--on { background: rgba(167,139,250,0.2); color: var(--accent, #a78bfa); }
+
+/* Label and value as separate grid children, so the column gap actually
+   separates them -- wrapping each pair in a div is what produced "TYPEshorts". */
+.im-facts {
+  display: grid;
+  grid-template-columns: auto 1fr;
+  gap: 7px 14px;
+  margin: 0 0 14px;
+}
+.im-fact { display: contents; }
+.im-fact dt {
+  font-size: 9.5px;
+  letter-spacing: 0.07em;
+  text-transform: uppercase;
+  color: var(--text-dim, rgba(255,255,255,0.4));
+  white-space: nowrap;
+}
+.im-fact dd {
+  margin: 0;
+  font-size: 12px;
+  color: var(--text, #fff);
+  text-transform: capitalize;
+}
+
+.im-keywords { display: flex; flex-wrap: wrap; gap: 5px; }
+.im-keyword {
+  font-size: 10px;
+  padding: 3px 8px;
+  border-radius: 999px;
+  background: rgba(255,255,255,0.05);
+  color: var(--text-dim, rgba(255,255,255,0.5));
+}
+
+.im-right { min-width: 0; }
+
+@media (max-width: 720px) {
+  .im-body { grid-template-columns: 1fr; gap: 18px; }
+  .im-icon { max-width: 220px; }
+}
