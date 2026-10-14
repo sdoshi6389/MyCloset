@@ -77,16 +77,106 @@ def mark_worn(item_id: int):
         if not cur:
             return jsonify({"message": "Not found"}), 404
         nxt = int(cur[0].get("wear_count") or 0) + 1
+        today = date.today().isoformat()
         supa.table("closet_items").update({
-            "wear_count": nxt, "last_worn": date.today().isoformat(),
+            "wear_count": nxt, "last_worn": today,
         }).eq("id", item_id).eq("user_id", user_id).execute()
-        return jsonify({"id": item_id, "wear_count": nxt}), 200
+        return jsonify({"id": item_id, "wear_count": nxt, "last_worn": today}), 200
     except Exception as e:
         print(f"❌ /wear/item/{item_id}/worn: {type(e).__name__}: {e}")
         return jsonify({"message": "Failed"}), 500
 
 
 # ── The week ─────────────────────────────────────────────────────────────────
+@wear_bp.route("/item/<int:item_id>/history", methods=["GET"])
+def item_history(item_id: int):
+    """How an item has actually been used: how often, when, and with what.
+
+    "Worn four times, last on the 12th, usually with the grey joggers" is the
+    sort of thing only the app can know, and all of it was already being
+    recorded -- wear_count on the item, outfit_items for saved looks and
+    outfit_wear_items for logged days -- with nothing reading it back.
+    """
+    user_id = _get_user_id(request)
+    if not user_id:
+        return jsonify({"message": "Unauthorized"}), 401
+
+    supa = get_supa()
+    row = (supa.table("closet_items")
+           .select("id, wear_count, last_worn, in_laundry")
+           .eq("id", item_id).eq("user_id", user_id).limit(1).execute().data)
+    if not row:
+        return jsonify({"message": "Not found"}), 404
+    item = row[0]
+
+    # Saved looks this item belongs to.
+    mine = {o["id"]: o.get("name")
+            for o in ((supa.table("outfits").select("id, name")
+                       .eq("user_id", user_id).execute().data) or [])}
+    outfit_ids = []
+    partners: dict[int, int] = {}
+    if mine:
+        entries = (supa.table("outfit_items").select("outfit_id, closet_item_id")
+                   .in_("outfit_id", list(mine)).execute().data) or []
+        by_outfit: dict[int, list[int]] = {}
+        for e in entries:
+            if e.get("closet_item_id"):
+                by_outfit.setdefault(e["outfit_id"], []).append(e["closet_item_id"])
+        for oid, members in by_outfit.items():
+            if item_id in members:
+                outfit_ids.append(oid)
+                for other in members:
+                    if other != item_id:
+                        partners[other] = partners.get(other, 0) + 1
+
+    # Days it was actually worn, which is a stronger signal than being saved.
+    days = []
+    try:
+        wears = (supa.table("outfit_wears").select("id, worn_on")
+                 .eq("user_id", user_id).execute().data) or []
+        if wears:
+            by_wear = {w["id"]: w.get("worn_on") for w in wears}
+            rows = (supa.table("outfit_wear_items").select("wear_id, closet_item_id")
+                    .in_("wear_id", list(by_wear)).execute().data) or []
+            mine_wears = {r["wear_id"] for r in rows if r.get("closet_item_id") == item_id}
+            days = sorted({by_wear[w] for w in mine_wears if by_wear.get(w)}, reverse=True)
+            for r in rows:
+                if r["wear_id"] in mine_wears and r.get("closet_item_id") != item_id:
+                    cid = r["closet_item_id"]
+                    partners[cid] = partners.get(cid, 0) + 1
+    except Exception as e:
+        print(f"⚠️  item_history wears: {type(e).__name__}: {e}")
+
+    top = sorted(partners.items(), key=lambda kv: -kv[1])[:4]
+    paired = []
+    if top:
+        from storage_utils import icon_urls
+        meta = {r["id"]: r for r in
+                ((supa.table("closet_items")
+                  .select("id, matched_title, caption, type, icon_path")
+                  .in_("id", [i for i, _ in top]).execute().data) or [])}
+        for cid, n in top:
+            r = meta.get(cid)
+            if not r:
+                continue
+            full, thumb = icon_urls(r.get("icon_path"))
+            paired.append({
+                "id": cid,
+                "title": r.get("matched_title") or r.get("caption") or r.get("type") or "Item",
+                "thumb_url": thumb, "icon_url": full, "times": n,
+            })
+
+    return jsonify({
+        "id": item_id,
+        "wear_count": item.get("wear_count") or 0,
+        "last_worn": item.get("last_worn"),
+        "in_laundry": bool(item.get("in_laundry")),
+        "in_outfits": [{"id": o, "name": mine.get(o) or "Untitled look"} for o in outfit_ids],
+        "worn_days": days[:8],
+        "paired_with": paired,
+    }), 200
+
+
 @wear_bp.route("/week", methods=["GET"])
 def get_week():
     user_id = _get_user_id(request)

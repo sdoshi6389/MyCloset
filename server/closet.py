@@ -440,6 +440,52 @@ def confirm_upload():
     return jsonify({"message": "Processing started"}), 200
 
 
+@closet_bp.route("/closet/bulk_update", methods=["POST"])
+def bulk_update():
+    """Apply the same few fields to a set of items.
+
+    Twenty-odd items arrived with no readable brand, and fixing them one modal
+    at a time is the kind of chore that simply does not get done. Only the
+    fields someone would want to set in bulk are accepted, and the ids are
+    constrained to the caller's own closet.
+    """
+    user_id = get_user_id_from_token(request)
+    if not user_id:
+        return jsonify({"message": "Unauthorized"}), 401
+
+    data = request.get_json(silent=True) or {}
+    try:
+        ids = [int(i) for i in (data.get("ids") or [])][:500]
+    except (TypeError, ValueError):
+        return jsonify({"message": "Bad ids"}), 400
+    if not ids:
+        return jsonify({"message": "No items given"}), 400
+
+    patch = {}
+    if "brand" in data:
+        from garment_text import clean_brand
+        raw = (data.get("brand") or "").strip()
+        # An empty string means "clear it", which is different from not asking.
+        patch["brand"] = clean_brand(raw) if raw else None
+    if "size" in data:
+        from garment_text import normalise_size
+        raw = (data.get("size") or "").strip()
+        patch["size"] = (normalise_size(raw) or raw or None) if raw else None
+    if data.get("category"):
+        patch["category"] = str(data["category"]).strip()
+    if not patch:
+        return jsonify({"message": "Nothing to change"}), 400
+
+    supa = get_supa()
+    supa.table("closet_items").update(patch).eq("user_id", user_id).in_("id", ids).execute()
+    rows = (supa.table("closet_items").select(_ITEM_SELECT)
+            .eq("user_id", user_id).in_("id", ids).execute().data) or []
+    return jsonify({
+        "message": f"Updated {len(rows)} item(s)",
+        "items": [_serialize_item(r, user_id) for r in rows],
+    }), 200
+
+
 @closet_bp.route("/closet/add_from_catalog", methods=["POST"])
 def add_from_catalog():
     """Put a catalog piece into the user's closet.

@@ -792,3 +792,175 @@
   .im-body { grid-template-columns: 1fr; gap: 18px; }
   .im-icon { max-width: 220px; }
 }
+
+/* ── Sort and the never-worn filter ───────────────────────────────────────
+   The most useful question a wardrobe can answer is what you are not wearing. */
+.closet-sort {
+  padding: 7px 10px;
+  margin-right: var(--space-2, 8px);
+  border-radius: 999px;
+  border: 1px solid rgba(255,255,255,0.12);
+  background: rgba(255,255,255,0.04);
+  color: var(--text, #fff);
+  font-size: 12.5px;
+  font-family: inherit;
+  cursor: pointer;
+  box-sizing: border-box;
+}
+.closet-sort:focus { outline: none; border-color: var(--accent, #a78bfa); }
+
+.closet-unworn { display: inline-flex; align-items: center; gap: 7px; }
+.closet-unworn-count {
+  font-size: 10px;
+  padding: 1px 6px;
+  border-radius: 999px;
+  background: rgba(255,255,255,0.1);
+  color: var(--text-dim, rgba(255,255,255,0.55));
+}
+.closet-unworn.active .closet-unworn-count {
+  background: rgba(0,0,0,0.28);
+  color: inherit;
+}
+
+/* ── Selecting several items ──────────────────────────────────────────────*/
+.closet-card--picking { cursor: pointer; }
+.closet-card--picking .closet-card-image { cursor: pointer; }
+.closet-card--picked { outline: 2px solid var(--accent, #a78bfa); outline-offset: 2px; }
+
+.cc-check {
+  position: absolute;
+  top: 10px;
+  left: 10px;
+  z-index: 4;
+  width: 22px;
+  height: 22px;
+  border-radius: 7px;
+  border: 1.5px solid rgba(255,255,255,0.45);
+  background: rgba(14,13,19,0.7);
+  backdrop-filter: blur(6px);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 12px;
+  color: #15121f;
+  box-sizing: border-box;
+}
+.cc-check--on { background: var(--accent, #a78bfa); border-color: var(--accent, #a78bfa); }
+
+.bulk-bar {
+  position: fixed;
+  left: 50%;
+  bottom: 22px;
+  transform: translateX(-50%);
+  z-index: 60;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 10px 14px;
+  border-radius: 999px;
+  border: 1px solid rgba(255,255,255,0.12);
+  background: rgba(16,15,22,0.96);
+  backdrop-filter: blur(14px);
+  box-shadow: 0 16px 40px rgba(0,0,0,0.6);
+  max-width: calc(100vw - 48px);
+  flex-wrap: wrap;
+  box-sizing: border-box;
+}
+.bulk-count { font-size: 12.5px; color: var(--text, #fff); font-weight: 600; white-space: nowrap; }
+.bulk-link {
+  background: none;
+  border: none;
+  color: var(--text-dim, rgba(255,255,255,0.5));
+  font-size: 11.5px;
+  font-family: inherit;
+  cursor: pointer;
+  padding: 2px 4px;
+  white-space: nowrap;
+}
+.bulk-link:hover { color: var(--accent, #a78bfa); }
+.bulk-input {
+  width: 128px;
+  padding: 6px 10px;
+  border-radius: 999px;
+  border: 1px solid rgba(255,255,255,0.12);
+  background: rgba(255,255,255,0.05);
+  color: var(--text, #fff);
+  font-size: 12px;
+  font-family: inherit;
+  box-sizing: border-box;
+}
+.bulk-input--sm { width: 96px; }
+.bulk-input:focus { outline: none; border-color: var(--accent, #a78bfa); }
+.bulk-apply { white-space: nowrap; }
+.bulk-apply:disabled { opacity: 0.45; cursor: default; }
+
+/* ── What an item is usually worn with ────────────────────────────────────*/
+.im-history {
+  margin-top: 16px;
+  padding-top: 14px;
+  border-top: 1px solid rgba(255,255,255,0.07);
+}
+.im-history-title {
+  margin: 0 0 9px;
+  font-size: 9.5px;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--text-dim, rgba(255,255,255,0.42));
+  font-weight: 600;
+}
+.im-pairs { display: flex; gap: 8px; flex-wrap: wrap; }
+.im-pair {
+  position: relative;
+  width: 46px;
+  height: 46px;
+  border-radius: 9px;
+  overflow: hidden;
+  background: rgba(255,255,255,0.05);
+  border: 1px solid rgba(255,255,255,0.07);
+  box-sizing: border-box;
+}
+.im-pair img { width: 100%; height: 100%; object-fit: contain; }
+.im-pair-blank { display: block; width: 100%; height: 100%; }
+.im-pair-times {
+  position: absolute;
+  right: 2px;
+  bottom: 2px;
+  font-size: 8.5px;
+  padding: 1px 4px;
+  border-radius: 999px;
+  background: rgba(0,0,0,0.7);
+  color: #fff;
+}
+.im-history-note {
+  margin: 10px 0 0;
+  font-size: 11px;
+  line-height: 1.45;
+  color: var(--text-dim, rgba(255,255,255,0.45));
+}
+
+/* ── Capsule result ───────────────────────────────────────────────────────*/
+.capsule-box { max-width: 760px; width: calc(100vw - 48px); }
+.capsule-sub {
+  margin: 4px 0 18px;
+  font-size: 12.5px;
+  color: var(--text-dim, rgba(255,255,255,0.5));
+}
+.capsule-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(118px, 1fr));
+  gap: 12px;
+  max-height: 52vh;
+  overflow-y: auto;
+}
+.capsule-look {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 2px;
+  padding: 10px 8px;
+  border-radius: 12px;
+  background: rgba(255,255,255,0.035);
+  border: 1px solid rgba(255,255,255,0.06);
+  box-sizing: border-box;
+}
+.capsule-look img { width: 76%; object-fit: contain; }

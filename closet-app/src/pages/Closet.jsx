@@ -65,6 +65,7 @@ function Closet() {
   const [brandInput, setBrandInput] = useState("");
   const [sizeInput, setSizeInput] = useState("");
   const [categoryInput, setCategoryInput] = useState("");
+  const [itemHistory, setItemHistory] = useState(null);
   const [faissMatches, setFaissMatches] = useState([]);
   const [matchPage,    setMatchPage]    = useState(0);
   const [searchText,   setSearchText]   = useState("");
@@ -77,6 +78,22 @@ function Closet() {
   const [uploadProgress, setUploadProgress] = useState(null); // { done, total } | null
   const [activeCategory, setActiveCategory] = useState("All");
   const [query, setQuery] = useState("");
+  /* A wardrobe app's most useful question is "what am I not wearing", and the
+     answer was already in the data -- wear_count and last_worn -- with nothing
+     reading it. Sorting and filtering happen here rather than on the server:
+     the closet is already loaded in full. */
+  const [sortBy, setSortBy] = useState("added");
+  const [unwornOnly, setUnwornOnly] = useState(false);
+  /* Selection mode. Twenty-odd items arrived with no readable brand, and
+     fixing those one modal at a time is a chore nobody completes. */
+  const [selectMode, setSelectMode] = useState(false);
+  const [selected, setSelected] = useState(() => new Set());
+  const [bulkBrand, setBulkBrand] = useState("");
+  const [bulkSize, setBulkSize] = useState("");
+  const [bulkCategory, setBulkCategory] = useState("");
+  const [bulkBusy, setBulkBusy] = useState(false);
+  const [capsule, setCapsule] = useState(null);
+  const [capsuleBusy, setCapsuleBusy] = useState(false);
   const [activeSubcategory, setActiveSubcategory] = useState(null);
 
   const MAX_UPLOADS = 8;
@@ -105,6 +122,18 @@ function Closet() {
   }, []);
 
   const authHeaders = () => ({ Authorization: `Bearer ${token}` });
+
+  /* How the item has been used, fetched when it is opened rather than with the
+     closet: it is one row per card and nobody reads it until they look. */
+  useEffect(() => {
+    if (!activeItem?.id) { setItemHistory(null); return; }
+    let alive = true;
+    setItemHistory(null);
+    axios.get(`${API}/wear/item/${activeItem.id}/history`, { headers: authHeaders() })
+      .then((r) => { if (alive) setItemHistory(r.data); })
+      .catch(() => { /* the modal is useful without it */ });
+    return () => { alive = false; };
+  }, [activeItem?.id]);
 
   const fetchItems = async () => {
     try {
@@ -578,7 +607,74 @@ function Closet() {
       )].sort()
     : [];
 
-  const searched = query ? items.filter((it) => matchesQuery(it, query)) : items;
+  const toggleSelected = (id) => setSelected((prev) => {
+    const next = new Set(prev);
+    next.has(id) ? next.delete(id) : next.add(id);
+    return next;
+  });
+
+  const applyBulk = async () => {
+    if (!selected.size || bulkBusy) return;
+    const payload = { ids: [...selected] };
+    // Only send a field that was actually typed into, so blanks do not wipe
+    // values on items the change was not meant for.
+    if (bulkBrand.trim()) payload.brand = bulkBrand.trim();
+    if (bulkSize.trim()) payload.size = bulkSize.trim();
+    if (bulkCategory) payload.category = bulkCategory;
+    if (Object.keys(payload).length === 1) return;
+
+    setBulkBusy(true);
+    try {
+      const { data } = await axios.post(`${API}/closet/bulk_update`, payload,
+                                        { headers: authHeaders() });
+      const byId = Object.fromEntries((data.items || []).map((i) => [i.id, i]));
+      setItems((prev) => prev.map((i) => (byId[i.id] ? { ...i, ...byId[i.id] } : i)));
+      setBulkBrand(""); setBulkSize(""); setBulkCategory("");
+      setSelected(new Set());
+      setSelectMode(false);
+    } catch (e) {
+      console.error("Bulk update failed:", e);
+      alert(e?.response?.data?.message || "Could not update those items.");
+    } finally {
+      setBulkBusy(false);
+    }
+  };
+
+  /* "If I pack only these, what can I actually wear?" -- the same assembly the
+     recommender does, over the chosen items only. */
+  const askCapsule = async () => {
+    if (selected.size < 2 || capsuleBusy) return;
+    setCapsuleBusy(true);
+    try {
+      const { data } = await axios.post(`${API}/suggestions/capsule`,
+                                        { ids: [...selected] },
+                                        { headers: authHeaders() });
+      setCapsule(data);
+    } catch (e) {
+      alert(e?.response?.data?.message || "Could not work that out.");
+    } finally {
+      setCapsuleBusy(false);
+    }
+  };
+
+  const daysSince = (iso) => {
+    if (!iso) return Infinity;           // never worn sorts as longest ago
+    const d = (Date.now() - new Date(iso).getTime()) / 86400000;
+    return Number.isFinite(d) ? d : Infinity;
+  };
+
+  let searched = query ? items.filter((it) => matchesQuery(it, query)) : items;
+  if (unwornOnly) searched = searched.filter((it) => !(it.wear_count > 0));
+  if (sortBy !== "added") {
+    searched = [...searched].sort((a, b) => {
+      if (sortBy === "least") return (a.wear_count || 0) - (b.wear_count || 0);
+      if (sortBy === "stale") return daysSince(b.last_worn) - daysSince(a.last_worn);
+      if (sortBy === "name") {
+        return (a.matched_title || a.caption || "").localeCompare(b.matched_title || b.caption || "");
+      }
+      return 0;
+    });
+  }
 
   const grouped = {};
   (activeCategory === "All" ? [...categories, "Uncategorized"] : [activeCategory]).forEach((cat) => {
@@ -663,6 +759,27 @@ function Closet() {
             </span>
           )}
         </div>
+        <button className={`closet-cat-tab${selectMode ? " active" : ""}`}
+                onClick={() => { setSelectMode((v) => !v); setSelected(new Set()); }}
+                title="Pick several items and change them together">
+          {selectMode ? "Done" : "Select"}
+        </button>
+        <select className="closet-sort" value={sortBy}
+                onChange={(e) => setSortBy(e.target.value)}
+                aria-label="Sort your closet">
+          <option value="added">Recently added</option>
+          <option value="least">Least worn</option>
+          <option value="stale">Longest unworn</option>
+          <option value="name">Name A–Z</option>
+        </select>
+        <button className={`closet-cat-tab closet-unworn${unwornOnly ? " active" : ""}`}
+                onClick={() => setUnwornOnly((v) => !v)}
+                title="Only items you have never worn">
+          Never worn
+          <span className="closet-unworn-count">
+            {items.filter((it) => !(it.wear_count > 0)).length}
+          </span>
+        </button>
         {["All", ...categories].map((cat) => (
           <button
             key={cat}
@@ -722,6 +839,9 @@ function Closet() {
                   index={index}
                   ownedByMe={ownedByMe}
                   ownerInitial={item.owner_initial}
+                  selectMode={selectMode}
+                  isSelected={selected.has(item.id)}
+                  onToggleSelect={() => toggleSelected(item.id)}
                   onZoom={() => setZoomedItem(item)}
                   onEdit={ownedByMe ? () => {
                     // Use the freshest copy from state, not the closure's snapshot
@@ -806,6 +926,77 @@ function Closet() {
         );
       })()}
 
+      {/* ── Bulk edit bar ───────────────────────────────────────────────────── */}
+      {selectMode && (
+        <div className="bulk-bar">
+          <span className="bulk-count">
+            {selected.size} selected
+          </span>
+          <button className="bulk-link"
+                  onClick={() => setSelected(new Set(
+                    Object.values(grouped).flat().map((i) => i.id)))}>
+            Select all shown
+          </button>
+          <button className="bulk-link" onClick={() => setSelected(new Set())}>Clear</button>
+
+          <input className="bulk-input" placeholder="Brand" value={bulkBrand}
+                 onChange={(e) => setBulkBrand(e.target.value)} />
+          <input className="bulk-input bulk-input--sm" placeholder="Size" value={bulkSize}
+                 onChange={(e) => setBulkSize(e.target.value)} />
+          <select className="bulk-input bulk-input--sm" value={bulkCategory}
+                  onChange={(e) => setBulkCategory(e.target.value)}>
+            <option value="">Category</option>
+            {categories.map((c) => <option key={c}>{c}</option>)}
+          </select>
+
+          <button className="btn-primary bulk-apply"
+                  disabled={!selected.size || bulkBusy
+                            || !(bulkBrand.trim() || bulkSize.trim() || bulkCategory)}
+                  onClick={applyBulk}>
+            {bulkBusy ? "Applying…" : `Apply to ${selected.size}`}
+          </button>
+          <button className="btn-secondary bulk-apply"
+                  disabled={selected.size < 2 || capsuleBusy}
+                  onClick={askCapsule}
+                  title="How many outfits do these make?">
+            {capsuleBusy ? "Working…" : "What can I wear?"}
+          </button>
+        </div>
+      )}
+
+      {/* ── Capsule result ──────────────────────────────────────────────────── */}
+      {capsule && (
+        <div className="modal-overlay" onClick={() => setCapsule(null)}>
+          <div className="modal-box capsule-box" onClick={(e) => e.stopPropagation()}>
+            <h3 className="im-title">
+              {capsule.picked} pieces make {capsule.total} outfit
+              {capsule.total === 1 ? "" : "s"}
+            </h3>
+            <p className="capsule-sub">
+              {capsule.total === 0
+                ? "Not enough to build a full look — you need a top and a bottom at least."
+                : capsule.unused?.length
+                  ? `${capsule.unused.length} of them never made it into a look.`
+                  : "Every piece earns its place."}
+            </p>
+            <div className="capsule-grid">
+              {(capsule.outfits || []).map((look, i) => (
+                <div className="capsule-look" key={i}>
+                  {Object.entries(look.items || {}).map(([slot, it]) => (
+                    <img key={slot} src={it.thumb_url || it.icon_url || it.image_url}
+                         alt={it.title || ""} loading="lazy" />
+                  ))}
+                </div>
+              ))}
+            </div>
+            <div className="modal-action-row">
+              <button className="btn-secondary" style={{ marginLeft: "auto" }}
+                      onClick={() => setCapsule(null)}>Close</button>
+            </div>
+          </div>
+        </div>
+      )}
+
       {/* ── Metadata modal ──────────────────────────────────────────────────── */}
       {activeItem && !faissMatches.length && (
         <div className="modal-overlay" onClick={() => { stopBrandPoll(); stopEmbedPoll(); setActiveItem(null); }}>
@@ -829,13 +1020,15 @@ function Closet() {
                   <img src={iconSrc(activeItem.icon_path)} alt="" className="im-icon" />
                 )}
                 <div className="im-stats">
-                  <span className={`im-stat${activeItem.in_laundry ? " im-stat--on" : ""}`}>
-                    {activeItem.in_laundry ? "In the wash" : "Clean"}
+                  <span className={`im-stat${(itemHistory?.in_laundry ?? activeItem.in_laundry) ? " im-stat--on" : ""}`}>
+                    {(itemHistory?.in_laundry ?? activeItem.in_laundry) ? "In the wash" : "Clean"}
                   </span>
-                  <span className="im-stat">Worn {activeItem.wear_count || 0}&times;</span>
-                  {activeItem.last_worn && (
+                  <span className="im-stat">
+                    Worn {itemHistory?.wear_count ?? activeItem.wear_count ?? 0}&times;
+                  </span>
+                  {(itemHistory?.last_worn || activeItem.last_worn) && (
                     <span className="im-stat">
-                      Last {new Date(activeItem.last_worn).toLocaleDateString()}
+                      Last {new Date(itemHistory?.last_worn || activeItem.last_worn).toLocaleDateString()}
                     </span>
                   )}
                 </div>
@@ -854,6 +1047,35 @@ function Closet() {
                     {itemKeywords(activeItem).slice(0, 10).map((k, i) => (
                       <span className="im-keyword" key={i}>{k}</span>
                     ))}
+                  </div>
+                )}
+
+                {(itemHistory?.paired_with?.length > 0
+                  || itemHistory?.in_outfits?.length > 0) && (
+                  <div className="im-history">
+                    {itemHistory.paired_with?.length > 0 && (
+                      <>
+                        <h4 className="im-history-title">Usually worn with</h4>
+                        <div className="im-pairs">
+                          {itemHistory.paired_with.map((p) => (
+                            <div className="im-pair" key={p.id} title={`${p.title} · ${p.times}x`}>
+                              {p.thumb_url
+                                ? <img src={p.thumb_url} alt="" loading="lazy" />
+                                : <span className="im-pair-blank" />}
+                              <span className="im-pair-times">{p.times}&times;</span>
+                            </div>
+                          ))}
+                        </div>
+                      </>
+                    )}
+                    {itemHistory.in_outfits?.length > 0 && (
+                      <p className="im-history-note">
+                        In {itemHistory.in_outfits.length} saved look
+                        {itemHistory.in_outfits.length === 1 ? "" : "s"}
+                        {": "}
+                        {itemHistory.in_outfits.slice(0, 3).map((o) => o.name).join(", ")}
+                      </p>
+                    )}
                   </div>
                 )}
               </div>
@@ -992,7 +1214,8 @@ function iconFilename(iconPath) {
   return iconPath.split(/[/\\]/).pop();
 }
 
-function ClosetItemCard({ item, index = 0, ownedByMe, ownerInitial, onZoom, onEdit, onDelete }) {
+function ClosetItemCard({ item, index = 0, ownedByMe, ownerInitial, onZoom, onEdit, onDelete,
+                         selectMode = false, isSelected = false, onToggleSelect }) {
   const [hovered, setHovered] = useState(false);
   const [hoverPos, setHoverPos] = useState(null);
   const [imgLoaded, setImgLoaded] = useState(false);
@@ -1004,6 +1227,7 @@ function ClosetItemCard({ item, index = 0, ownedByMe, ownerInitial, onZoom, onEd
   const [inLaundry, setInLaundry] = useState(Boolean(item.in_laundry));
   const [wearBusy, setWearBusy]   = useState(false);
   const [menuOpen, setMenuOpen]   = useState(false);
+  const [lastWorn, setLastWorn]   = useState(item.last_worn || null);
 
   useEffect(() => { setWearCount(item.wear_count || 0); }, [item.wear_count]);
   useEffect(() => { setInLaundry(Boolean(item.in_laundry)); }, [item.in_laundry]);
@@ -1033,6 +1257,7 @@ function ClosetItemCard({ item, index = 0, ownedByMe, ownerInitial, onZoom, onEd
       const r = await axios.post(`${API}/wear/item/${item.id}/worn`, {},
                                  { headers: cardAuth() });
       if (typeof r.data?.wear_count === "number") setWearCount(r.data.wear_count);
+      if (r.data?.last_worn) setLastWorn(r.data.last_worn);
     } catch {
       setWearCount((c) => Math.max(0, c - 1));
     } finally {
@@ -1060,7 +1285,7 @@ function ClosetItemCard({ item, index = 0, ownedByMe, ownerInitial, onZoom, onEd
   return (
     <motion.div
       ref={cardRef}
-      className="closet-card"
+      className={`closet-card${selectMode ? " closet-card--picking" : ""}${isSelected ? " closet-card--picked" : ""}`}
       style={{
         "--card-tint": cardTint(item.color),
         "--card-tint-hover": cardTintHover(item.color),
@@ -1073,7 +1298,13 @@ function ClosetItemCard({ item, index = 0, ownedByMe, ownerInitial, onZoom, onEd
       onMouseEnter={handleMouseEnter}
       onMouseLeave={() => { setHovered(false); setHoverPos(null); setMenuOpen(false); }}
     >
-      <div className={`closet-card-image${imgLoaded ? "" : " closet-card-image--loading"}`} onClick={onZoom}>
+      <div className={`closet-card-image${imgLoaded ? "" : " closet-card-image--loading"}`}
+           onClick={selectMode ? onToggleSelect : onZoom}>
+        {selectMode && (
+          <span className={`cc-check${isSelected ? " cc-check--on" : ""}`} aria-hidden="true">
+            {isSelected ? "✓" : ""}
+          </span>
+        )}
         <img
           src={thumbUrl || photoSrc(item.url)}
           alt={item.filename}
@@ -1090,7 +1321,9 @@ function ClosetItemCard({ item, index = 0, ownedByMe, ownerInitial, onZoom, onEd
         )}
         {wearCount > 0 && (
           <span className="closet-wear-badge"
-                title={`Worn ${wearCount} time${wearCount === 1 ? "" : "s"}`}>
+                title={lastWorn
+                  ? `Worn ${wearCount} time${wearCount === 1 ? "" : "s"}, last on ${new Date(lastWorn).toLocaleDateString()}`
+                  : `Worn ${wearCount} time${wearCount === 1 ? "" : "s"}`}>
             {wearCount}x
           </span>
         )}
@@ -1098,7 +1331,7 @@ function ClosetItemCard({ item, index = 0, ownedByMe, ownerInitial, onZoom, onEd
         {/* Logging a wear is the thing done most, so it is the one button that
             is always there. The rest sit behind the menu rather than crowding
             the card -- four buttons used to cover the item's own name. */}
-        {ownedByMe !== false && (
+        {ownedByMe !== false && !selectMode && (
           <div className="cc-actions" onClick={(e) => e.stopPropagation()}>
             <button className="cc-act cc-act--wear" onClick={markWorn} disabled={wearBusy}
                     title="I wore this today" aria-label="I wore this today">

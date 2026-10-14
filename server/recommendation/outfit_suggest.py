@@ -31,9 +31,16 @@ EXTRA_SLOTS = ["outer_top", "hat", "bag", "necklace", "bracelet"]
 WEATHER_WEIGHT = 0.30      # share of the final score owned by weather fit
 
 
-def _closet_by_slot(user_id: int) -> dict[str, list[dict]]:
+def _closet_by_slot(user_id: int, only_ids: set | None = None) -> dict[str, list[dict]]:
+    """Items grouped by the slot they fill, optionally narrowed to a chosen few.
+
+    The narrowing is what lets someone ask "if I pack these eight things, what
+    can I actually wear?" -- the same assembly, over a smaller wardrobe.
+    """
     rows = (get_supa().table("closet_items")
             .select("*").eq("user_id", user_id).execute().data) or []
+    if only_ids is not None:
+        rows = [r for r in rows if r["id"] in only_ids]
     out: dict[str, list[dict]] = {}
     for r in rows:
         slot = _infer_slot(r)
@@ -120,19 +127,22 @@ def _memo_key(user_id: int, weather: dict | None, count: int, variant: int = 0) 
 
 def suggest_outfits(user_id: int, weather: dict | None = None,
                     count: int = 6, seed: int | None = None,
-                    variant: int = 0) -> list[dict[str, Any]]:
+                    variant: int = 0,
+                    only_ids: set | None = None) -> list[dict[str, Any]]:
     """Complete looks assembled from the user's closet, best first.
 
     Memoised briefly: the recommendations page asks for outfits and Discover at
     the same moment, and Discover assembles its base looks the same way.
     """
+    if only_ids is not None:
+        return _suggest_outfits_uncached(user_id, weather, count, seed, variant, only_ids)
     if seed is None:                      # a caller asking for a specific seed
         key = _memo_key(user_id, weather, count, variant)  # wants fresh randomness
         with _LOOK_MEMO_LOCK:
             hit = _LOOK_MEMO.get(key)
             if hit and time.time() - hit[0] < _LOOK_MEMO_TTL:
                 return hit[1]
-        looks = _suggest_outfits_uncached(user_id, weather, count, seed, variant)
+        looks = _suggest_outfits_uncached(user_id, weather, count, seed, variant, only_ids)
         if looks:
             with _LOOK_MEMO_LOCK:
                 _LOOK_MEMO[key] = (time.time(), looks)
@@ -140,14 +150,15 @@ def suggest_outfits(user_id: int, weather: dict | None = None,
                     for k, _ in sorted(_LOOK_MEMO.items(), key=lambda kv: kv[1][0])[:32]:
                         _LOOK_MEMO.pop(k, None)
         return looks
-    return _suggest_outfits_uncached(user_id, weather, count, seed, variant)
+    return _suggest_outfits_uncached(user_id, weather, count, seed, variant, only_ids)
 
 
 def _suggest_outfits_uncached(user_id: int, weather: dict | None = None,
                               count: int = 6, seed: int | None = None,
-                              variant: int = 0) -> list[dict[str, Any]]:
+                              variant: int = 0,
+                              only_ids: set | None = None) -> list[dict[str, Any]]:
     profile = get_user_profile(user_id)
-    by_slot = _closet_by_slot(user_id)
+    by_slot = _closet_by_slot(user_id, only_ids)
     tops = by_slot.get("inner_top") or []
     if not tops or not by_slot.get("inner_bottom"):
         return []

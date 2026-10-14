@@ -141,6 +141,52 @@ def weather_now():
     return jsonify({"weather": w}), 200
 
 
+@suggestions_bp.route("/capsule", methods=["POST"])
+def capsule():
+    """How many outfits a chosen handful of items actually makes.
+
+    The question behind packing a bag or building a capsule: not "what should I
+    wear" but "if I take only these, am I covered?" It runs the same assembly
+    over the subset, so a look it returns is a look the recommender would stand
+    behind.
+    """
+    user_id = _get_user_id(request)
+    if not user_id:
+        return jsonify({"message": "Unauthorized"}), 401
+
+    data = request.get_json(silent=True) or {}
+    try:
+        ids = {int(i) for i in (data.get("ids") or [])}
+    except (TypeError, ValueError):
+        return jsonify({"message": "Bad ids"}), 400
+    if len(ids) < 2:
+        return jsonify({"message": "Pick at least two pieces"}), 400
+
+    w = _weather_from(request)
+    try:
+        from recommendation.outfit_suggest import suggest_outfits
+        looks = suggest_outfits(user_id, weather=w, count=12, only_ids=ids) or []
+    except Exception as e:
+        print(f"❌ /suggestions/capsule: {type(e).__name__}: {e}")
+        return jsonify({"message": "Could not build looks"}), 500
+
+    used = set()
+    for L in looks:
+        for it in (L.get("items") or {}).values():
+            if it.get("id"):
+                used.add(it["id"])
+
+    return jsonify({
+        "weather": w,
+        "picked": len(ids),
+        "outfits": looks,
+        "total": len(looks),
+        # Something picked that never makes it into a look is dead weight in a
+        # suitcase, and saying so is the useful half of the answer.
+        "unused": sorted(ids - used),
+    }), 200
+
+
 @suggestions_bp.route("/outfits", methods=["GET"])
 def outfit_suggestions():
     user_id = _get_user_id(request)
