@@ -107,7 +107,7 @@ function Closet() {
   const [capsuleBusy, setCapsuleBusy] = useState(false);
   const [activeSubcategory, setActiveSubcategory] = useState(null);
 
-  const MAX_UPLOADS = 8;
+  const MAX_UPLOADS = 30;
 
   const videoRef = useRef(null);
   const canvasRef = useRef(null);

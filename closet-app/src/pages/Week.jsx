@@ -193,11 +193,14 @@ export default function Week() {
           {(loading ? Array.from({ length: 7 }, () => null) : days).map((day, i) => {
             const date = day?.date;
             const isToday = date && date === todayIso;
+            // Seven identical buttons invited logging outfits for days that
+            // have not happened. A wear is a record, not a plan.
+            const isFuture = date && date > iso(new Date());
             const hasItems = day && Object.keys(day.items || {}).length > 0;
             return (
               <motion.div
                 key={date || i}
-                className={`wk-day${isToday ? " wk-day--today" : ""}${hasItems ? " wk-day--filled" : ""}`}
+                className={`wk-day${isToday ? " wk-day--today" : ""}${hasItems ? " wk-day--filled" : ""}${isFuture ? " wk-day--future" : ""}`}
                 initial={{ opacity: 0, y: 14 }}
                 animate={{ opacity: 1, y: 0 }}
                 transition={{ duration: 0.4, ease: EASE, delay: Math.min(i * 0.04, 0.28) }}
@@ -232,8 +235,10 @@ export default function Week() {
                     </div>
                     <div className="wk-day-foot">
                       <button className="wk-btn wk-btn--primary"
-                              onClick={() => setPicking(date)} disabled={busy}>
-                        Log outfit
+                              onClick={() => setPicking(date)}
+                              disabled={busy || isFuture}
+                              title={isFuture ? "That day hasn't happened yet" : undefined}>
+                        {isFuture ? "Not yet" : "Log outfit"}
                       </button>
                     </div>
                   </>

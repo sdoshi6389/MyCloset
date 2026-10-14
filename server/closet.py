@@ -186,7 +186,10 @@ def serve_image(user_id, filename):
     return resp
 
 
-MAX_FILES_PER_UPLOAD = 8
+# Photos are shrunk in the browser before they are sent, so a batch is a few MB
+# rather than a few hundred. Each one still costs a GPT call, which is the real
+# limit and the person's to judge, not a number baked in here.
+MAX_FILES_PER_UPLOAD = 30
 
 # A phone photo arrives at about 4300x5700 and 6-28 MB. Nothing downstream wants
 # that: the card shows it a few hundred pixels wide, CLIP sees 224, and GPT
@@ -244,9 +247,13 @@ def _normalise_photo(filepath: str, filename: str) -> tuple[str, str]:
 
 
 _ITEM_SELECT = (
-    "id, filename, filepath, tag_text, brand, size, category, tags, "
+    # tags and emoticon_path are never written by anything -- the chips on a card
+    # come from subcategory, size and colour, and the emoji step was dropped.
+    # They travelled to the browser as nulls on every item. The columns are left
+    # in place; only the payload stops carrying them.
+    "id, filename, filepath, tag_text, brand, size, category, "
     "matched_brand, matched_title, icon_path, caption, type, color, style, season, "
-    "fabric, vibe, keywords, emoticon_path, vector_embedding, "
+    "fabric, vibe, keywords, vector_embedding, "
     "subcategory, layering_role, occasion, formality_score, "
     # wear tracking (migration 010)
     "wear_count, in_laundry, last_worn"

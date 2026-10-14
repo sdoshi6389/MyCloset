@@ -289,6 +289,11 @@ def _reason(parts: dict, weather: dict | None) -> str:
     return text
 
 
+# Far enough from 0 that Discover and the closet section never pick the same
+# looks, and fixed so a given variant is still reproducible.
+DISCOVER_VARIANT_OFFSET = 101
+
+
 # ── Discover: an existing look plus one or two catalog pieces ────────────────
 def discover_additions(user_id: int, weather: dict | None = None,
                        count: int = 6, max_new: int = 2,
@@ -360,8 +365,12 @@ def discover_additions(user_id: int, weather: dict | None = None,
 
     saved_count = len(base_looks)
     if saved_count < count:
+        # Walk a different part of the variant space from the outfits section.
+        # With nothing saved yet, Discover filled itself from the same call at
+        # the same variant, so the page showed one set of looks twice.
         for L in suggest_outfits(user_id, weather=weather,
-                                 count=count - saved_count, variant=variant):
+                                 count=count - saved_count,
+                                 variant=variant + DISCOVER_VARIANT_OFFSET):
             parts = {}
             for slot, formatted in L["items"].items():
                 if formatted.get("id"):

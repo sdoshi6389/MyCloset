@@ -98,7 +98,11 @@ def _infer_slot(item: dict) -> str | None:
         return "outer_top"
     if re.search(r"\b(bralette|sports.?bra|camisole|cami|undershirt|base.?layer|thermal|bodysuit|lingerie)\b", text): return "innerwear"
     if re.search(r"\bbra\b", text) and not re.search(r"\b(bracelet|bangle)\b", text): return "innerwear"
-    if re.search(r"\btank\b", text) and re.search(r"\b(top|under|inner)\b", text): return "innerwear"
+    # "tank top" used to land here, because the rule accepted tank + top as well
+    # as tank + under. A tank top is a top you are seen in; a tank undershirt is
+    # not, and only the second belongs in innerwear. Eight items sat out of
+    # every generated outfit because of the difference.
+    if re.search(r"\btank\b", text) and re.search(r"\b(under|inner|undershirt|base)\b", text): return "innerwear"
     if re.search(r"\b(boxers|briefs|boxer.?briefs|underwear)\b", text): return "underwear"
     if re.search(r"\b(shirt|tee|t-shirt|blouse|knit|sweater|pullover|sweatshirt|jersey|crop|cardigan|polo|tank|tube top)\b", text): return "inner_top"
     if re.search(r"\bhoodie\b", text): return "inner_top"

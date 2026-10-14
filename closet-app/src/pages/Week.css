@@ -340,3 +340,12 @@
   .wk-wrapped { gap: var(--space-4); }
   .wk-top { margin-left: 0; }
 }
+
+/* A day that has not happened yet: still visible, clearly not actionable. */
+.wk-day--future { opacity: 0.55; }
+.wk-day--future .wk-btn--primary {
+  background: rgba(255,255,255,0.05);
+  color: var(--text-dim, rgba(255,255,255,0.4));
+  cursor: default;
+  box-shadow: none;
+}
