@@ -1,5 +1,6 @@
 import React, { useEffect, useState } from "react";
 import axios from "axios";
+import { Link } from "react-router-dom";
 import Layout from "./Layout";
 import { useCircle } from "../context/CircleContext";
 import "./Feed.css";
@@ -193,7 +194,15 @@ export default function Feed() {
       {/* ── Posts ─────────────────────────────────────────────────────────── */}
       {posts.length === 0 && (
         <div className="feed-empty">
-          <p>Nothing to show yet. Post something or add friends!</p>
+          <h3>Nothing here yet</h3>
+          <p>
+            The feed fills up with looks you and your friends post. Share one of
+            your own, or add a friend to see theirs.
+          </p>
+          <div className="empty-actions">
+            <Link className="btn-primary" to="/outfits">Build a look</Link>
+            <Link className="btn-secondary" to="/discover">Find friends</Link>
+          </div>
         </div>
       )}
 

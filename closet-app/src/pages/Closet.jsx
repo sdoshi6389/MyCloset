@@ -17,6 +17,17 @@ import { cardTint, cardTintHover, colorEdge } from "../lib/colorFamily";
 
 const DEFAULT_CATEGORIES = ["Tops", "Bottoms", "Outerwear", "Innerwear", "Accessories", "Shoes"];
 
+/* Head down, the way you get dressed and the way a wardrobe is arranged.
+   Sorting the names alphabetically put Bottoms above Tops. */
+const CATEGORY_ORDER = ["Tops", "Outerwear", "Bottoms", "Shoes", "Accessories", "Innerwear"];
+const byWardrobeOrder = (a, b) => {
+  const ia = CATEGORY_ORDER.indexOf(a), ib = CATEGORY_ORDER.indexOf(b);
+  if (ia === -1 && ib === -1) return a.localeCompare(b);
+  if (ia === -1) return 1;
+  if (ib === -1) return -1;
+  return ia - ib;
+};
+
 /* The attributes worth reading at a glance. These were buried in a hover
    popover that covered the next card along; the modal has room for them and is
    where someone goes when they actually want the detail. */
@@ -159,7 +170,13 @@ function Closet() {
 
   // ── Reprocess icons via GPT ─────────────────────────────────────────────────
   const handleReprocessIcons = async () => {
-    if (!window.confirm("Regenerate icons for all items missing icons using GPT? This may take several minutes.")) return;
+    const missing = items.filter((it) => !it.icon_path).length;
+    const target = missing || items.length;
+    if (!window.confirm(
+      `Regenerate icons for ${target} item${target === 1 ? "" : "s"}?\n\n` +
+      `Each one is an image-generation call, so this costs roughly ` +
+      `$${(target * 0.07).toFixed(2)} and takes several minutes.`
+    )) return;
     try {
       const res = await axios.post(
         `${API}/reprocess_icons`,
@@ -677,7 +694,9 @@ function Closet() {
   }
 
   const grouped = {};
-  (activeCategory === "All" ? [...categories, "Uncategorized"] : [activeCategory]).forEach((cat) => {
+  (activeCategory === "All"
+    ? [...[...categories].sort(byWardrobeOrder), "Uncategorized"]
+    : [activeCategory]).forEach((cat) => {
     let group = searched.filter((it) =>
       cat === "Uncategorized"
         ? !it.category || !categories.includes(it.category)
@@ -780,7 +799,10 @@ function Closet() {
             {items.filter((it) => !(it.wear_count > 0)).length}
           </span>
         </button>
-        {["All", ...categories].map((cat) => (
+        {["All", ...[...categories].sort(byWardrobeOrder)]
+          .filter((cat) => cat === "All" || cat === activeCategory
+                        || items.some((it) => it.category === cat))
+          .map((cat) => (
           <button
             key={cat}
             className={`closet-cat-tab${activeCategory === cat ? " active" : ""}`}

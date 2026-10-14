@@ -62,3 +62,33 @@ button:focus-visible {
 }
 
 /* App uses its own dark theme — no OS light-mode override */
+
+/* ── Empty states ─────────────────────────────────────────────────────────
+   A page with nothing on it should say what to do next, not only that it is
+   empty. One grey sentence in a large void reads as something broken. */
+.feed-empty,
+.closet-empty {
+  max-width: 420px;
+  margin: 72px auto;
+  text-align: center;
+}
+.feed-empty h3,
+.closet-empty h3 {
+  margin: 0 0 8px;
+  font-size: 1.05rem;
+  color: var(--text, #fff);
+}
+.feed-empty p,
+.closet-empty p {
+  margin: 0;
+  font-size: 13px;
+  line-height: 1.55;
+  color: var(--text-dim, rgba(255,255,255,0.5));
+}
+.empty-actions {
+  display: flex;
+  gap: 10px;
+  justify-content: center;
+  margin-top: 18px;
+}
+.empty-actions a { text-decoration: none; }

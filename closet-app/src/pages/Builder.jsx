@@ -1058,7 +1058,7 @@ export default function Builder() {
               ✦ Smart Fill
             </button>
             <button className="pb-btn-save" onClick={openSave} disabled={!filledCount}>
-              Preserve
+              Save look
             </button>
             <div className="pb-history">
               <button className="pb-btn-hist" onClick={undo} disabled={!canUndo}
@@ -1427,7 +1427,7 @@ export default function Builder() {
       {saveModal && (
         <div className="pb-modal-backdrop" onClick={() => setSaveModal(false)}>
           <div className="pb-save-modal" onClick={(e) => e.stopPropagation()}>
-            <h3 className="pb-modal-title">{updateExisting ? "Update this look" : "Preserve this look"}</h3>
+            <h3 className="pb-modal-title">{updateExisting ? "Update this look" : "Save this look"}</h3>
             <input
               className="pb-save-input"
               value={saveName}

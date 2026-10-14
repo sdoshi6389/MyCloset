@@ -199,9 +199,14 @@
   color: var(--text-bright);
   text-shadow: 0 1px 3px rgba(0,0,0,0.6);
   margin: 0;
-  white-space: nowrap;
+  /* Two lines before clipping. Product names run long and a single nowrap line
+     cut most of them mid-word. */
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
   overflow: hidden;
-  text-overflow: ellipsis;
+  line-height: 1.3;
+  min-height: 2.6em;
   text-transform: capitalize;
 }
 

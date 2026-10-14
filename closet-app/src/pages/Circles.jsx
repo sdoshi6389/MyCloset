@@ -212,7 +212,11 @@ export default function Circles() {
         <div className="circles-detail">
           {!selectedCircle ? (
             <div className="circles-empty section-card">
-              <p>Select a circle to view its members.</p>
+              <h3>Pick a circle</h3>
+              <p>
+                A circle is a shared wardrobe — choose one on the left to see who
+                is in it and what they have.
+              </p>
             </div>
           ) : (
             <div className="section-card">
