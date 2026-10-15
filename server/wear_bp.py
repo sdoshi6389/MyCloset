@@ -72,16 +72,33 @@ def mark_worn(item_id: int):
         return jsonify({"message": "Unauthorized"}), 401
     supa = get_supa()
     try:
-        cur = (supa.table("closet_items").select("wear_count")
+        cur = (supa.table("closet_items").select("wear_count, last_worn")
                .eq("id", item_id).eq("user_id", user_id).limit(1).execute().data)
         if not cur:
             return jsonify({"message": "Not found"}), 404
-        nxt = int(cur[0].get("wear_count") or 0) + 1
-        today = date.today().isoformat()
-        supa.table("closet_items").update({
-            "wear_count": nxt, "last_worn": today,
-        }).eq("id", item_id).eq("user_id", user_id).execute()
-        return jsonify({"id": item_id, "wear_count": nxt, "last_worn": today}), 200
+        # delta lets a wear be taken back. Tapping "wore it" on the wrong card
+        # was previously permanent, which makes people stop tapping it at all.
+        body = request.get_json(silent=True) or {}
+        try:
+            delta = int(body.get("delta", 1))
+        except (TypeError, ValueError):
+            delta = 1
+        delta = max(-1, min(1, delta)) or 1
+
+        nxt = max(0, int(cur[0].get("wear_count") or 0) + delta)
+        patch = {"wear_count": nxt}
+        if delta > 0:
+            patch["last_worn"] = date.today().isoformat()
+        elif nxt == 0:
+            # Nothing left to have been worn on.
+            patch["last_worn"] = None
+        supa.table("closet_items").update(patch) \
+            .eq("id", item_id).eq("user_id", user_id).execute()
+        # Report what is stored, not what this call happened to set. Taking one
+        # wear off an item that still has others leaves last_worn alone, and
+        # returning the key as absent read to the caller as "cleared".
+        last = patch["last_worn"] if "last_worn" in patch else cur[0].get("last_worn")
+        return jsonify({"id": item_id, "wear_count": nxt, "last_worn": last}), 200
     except Exception as e:
         print(f"❌ /wear/item/{item_id}/worn: {type(e).__name__}: {e}")
         return jsonify({"message": "Failed"}), 500

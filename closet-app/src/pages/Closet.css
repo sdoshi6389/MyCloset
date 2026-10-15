@@ -969,3 +969,62 @@
   box-sizing: border-box;
 }
 .capsule-look img { width: 76%; object-fit: contain; }
+
+/* ── Correcting what GPT guessed ──────────────────────────────────────────*/
+.im-facts-head {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  margin: 0 0 9px;
+  font-size: 9.5px;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--text-dim, rgba(255,255,255,0.42));
+  font-weight: 600;
+}
+.im-facts-actions { display: flex; gap: 10px; }
+.im-facts-link {
+  background: none;
+  border: none;
+  padding: 0;
+  font: inherit;
+  letter-spacing: inherit;
+  text-transform: inherit;
+  color: var(--accent, #a78bfa);
+  cursor: pointer;
+}
+.im-facts-link:disabled { opacity: 0.5; cursor: default; }
+.im-facts-empty { margin: 0 0 14px; font-size: 12px; color: var(--text-dim, rgba(255,255,255,0.4)); }
+
+.im-facts--editing { gap: 6px 14px; }
+.im-fact-input {
+  width: 100%;
+  padding: 3px 7px;
+  border-radius: 6px;
+  border: 1px solid rgba(255,255,255,0.12);
+  background: rgba(255,255,255,0.05);
+  color: var(--text, #fff);
+  font-size: 11.5px;
+  font-family: inherit;
+  box-sizing: border-box;
+}
+.im-fact-input:focus { outline: none; border-color: var(--accent, #a78bfa); }
+
+.im-wear { display: inline-flex; align-items: center; gap: 6px; }
+.im-wear-btn {
+  width: 17px;
+  height: 17px;
+  border-radius: 50%;
+  border: 1px solid rgba(255,255,255,0.18);
+  background: rgba(255,255,255,0.06);
+  color: var(--text, #fff);
+  font-size: 11px;
+  line-height: 1;
+  cursor: pointer;
+  padding: 0;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+}
+.im-wear-btn:hover:not(:disabled) { background: var(--accent, #a78bfa); color: #15121f; }
+.im-wear-btn:disabled { opacity: 0.3; cursor: default; }

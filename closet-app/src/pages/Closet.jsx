@@ -31,23 +31,36 @@ const byWardrobeOrder = (a, b) => {
 /* The attributes worth reading at a glance. These were buried in a hover
    popover that covered the next card along; the modal has room for them and is
    where someone goes when they actually want the detail. */
+const factClean = (v) => (typeof v === "string"
+  ? v.replace(/[\[\]'"]/g, "").replace(/_/g, " ").trim()
+  : Array.isArray(v) ? v.join(", ") : v);
+
+/* Each fact names the column it came from, so the same list can be read or
+   corrected. What GPT guessed is a starting point, not a verdict. */
+const FACT_FIELDS = [
+  ["Type",      "subcategory"],
+  ["Category",  "category"],
+  ["Colour",    "color"],
+  ["Size",      "size"],
+  ["Fabric",    "fabric"],
+  ["Layer",     "layering_role"],
+  ["Season",    "season"],
+  ["Style",     "style"],
+  ["Occasion",  "occasion"],
+  ["Vibe",      "vibe"],
+  ["Formality", "formality_score"],
+];
+
 function itemFacts(item) {
-  const clean = (v) => (typeof v === "string"
-    ? v.replace(/[\[\]'"]/g, "").replace(/_/g, " ").trim()
-    : Array.isArray(v) ? v.join(", ") : v);
-  return [
-    ["Type",      clean(item.subcategory || item.type)],
-    ["Category",  clean(item.category)],
-    ["Colour",    clean(item.color)],
-    ["Size",      clean(item.size)],
-    ["Fabric",    clean(item.fabric)],
-    ["Layer",     clean(item.layering_role)],
-    ["Season",    clean(item.season)],
-    ["Style",     clean(item.style)],
-    ["Occasion",  clean(item.occasion)],
-    ["Vibe",      clean(item.vibe)],
-    ["Formality", item.formality_score ? `${item.formality_score}/10` : null],
-  ].filter(([, v]) => v !== null && v !== undefined && v !== "");
+  return FACT_FIELDS
+    .map(([label, key]) => {
+      if (key === "formality_score") {
+        return [label, key, item.formality_score ? `${item.formality_score}/10` : null];
+      }
+      if (key === "subcategory") return [label, key, factClean(item.subcategory || item.type)];
+      return [label, key, factClean(item[key])];
+    })
+    .filter(([, , v]) => v !== null && v !== undefined && v !== "");
 }
 
 function itemKeywords(item) {
@@ -77,6 +90,9 @@ function Closet() {
   const [sizeInput, setSizeInput] = useState("");
   const [categoryInput, setCategoryInput] = useState("");
   const [itemHistory, setItemHistory] = useState(null);
+  const [editingFacts, setEditingFacts] = useState(false);
+  const [factDraft, setFactDraft] = useState({});
+  const [factBusy, setFactBusy] = useState(false);
   const [faissMatches, setFaissMatches] = useState([]);
   const [matchPage,    setMatchPage]    = useState(0);
   const [searchText,   setSearchText]   = useState("");
@@ -137,6 +153,7 @@ function Closet() {
   /* How the item has been used, fetched when it is opened rather than with the
      closet: it is one row per card and nobody reads it until they look. */
   useEffect(() => {
+    setEditingFacts(false);
     if (!activeItem?.id) { setItemHistory(null); return; }
     let alive = true;
     setItemHistory(null);
@@ -659,6 +676,55 @@ function Closet() {
 
   /* "If I pack only these, what can I actually wear?" -- the same assembly the
      recommender does, over the chosen items only. */
+  const startFactEdit = () => {
+    const d = {};
+    for (const [, key] of FACT_FIELDS) {
+      d[key] = key === "formality_score"
+        ? (activeItem?.formality_score ?? "")
+        : (factClean(activeItem?.[key]) ?? "");
+    }
+    // Type falls back to the free-form column when there is no subcategory.
+    if (!d.subcategory) d.subcategory = factClean(activeItem?.type) || "";
+    setFactDraft(d);
+    setEditingFacts(true);
+  };
+
+  const saveFacts = async () => {
+    if (!activeItem?.id || factBusy) return;
+    setFactBusy(true);
+    try {
+      const { data } = await axios.post(
+        `${API}/closet/item/${activeItem.id}/fields`, factDraft,
+        { headers: authHeaders() });
+      if (data.item) {
+        setItems((prev) => prev.map((i) => (i.id === data.item.id ? { ...i, ...data.item } : i)));
+        setActiveItem((prev) => ({ ...prev, ...data.item }));
+      }
+      setEditingFacts(false);
+    } catch (e) {
+      alert(e?.response?.data?.message || "Could not save those changes.");
+    } finally {
+      setFactBusy(false);
+    }
+  };
+
+  /* Taking a wear back. Tapping "wore it" on the wrong card was permanent,
+     which is the fastest way to stop someone tapping it at all. */
+  const nudgeWear = async (delta) => {
+    if (!activeItem?.id) return;
+    try {
+      const { data } = await axios.post(
+        `${API}/wear/item/${activeItem.id}/worn`, { delta },
+        { headers: authHeaders() });
+      const patch = { wear_count: data.wear_count, last_worn: data.last_worn };
+      setActiveItem((prev) => ({ ...prev, ...patch }));
+      setItemHistory((prev) => (prev ? { ...prev, ...patch } : prev));
+      setItems((prev) => prev.map((i) => (i.id === activeItem.id ? { ...i, ...patch } : i)));
+    } catch {
+      /* leave the count where it was */
+    }
+  };
+
   const askCapsule = async () => {
     if (selected.size < 2 || capsuleBusy) return;
     setCapsuleBusy(true);
@@ -1045,24 +1111,63 @@ function Closet() {
                   <span className={`im-stat${(itemHistory?.in_laundry ?? activeItem.in_laundry) ? " im-stat--on" : ""}`}>
                     {(itemHistory?.in_laundry ?? activeItem.in_laundry) ? "In the wash" : "Clean"}
                   </span>
-                  <span className="im-stat">
-                    Worn {itemHistory?.wear_count ?? activeItem.wear_count ?? 0}&times;
+                  <span className="im-stat im-wear">
+                    <button className="im-wear-btn" onClick={() => nudgeWear(-1)}
+                            disabled={(activeItem.wear_count ?? 0) <= 0}
+                            title="Take back a wear" aria-label="Take back a wear">−</button>
+                    Worn {activeItem.wear_count ?? 0}&times;
+                    <button className="im-wear-btn" onClick={() => nudgeWear(1)}
+                            title="Add a wear" aria-label="Add a wear">+</button>
                   </span>
-                  {(itemHistory?.last_worn || activeItem.last_worn) && (
+                  {activeItem.last_worn && (
                     <span className="im-stat">
-                      Last {new Date(itemHistory?.last_worn || activeItem.last_worn).toLocaleDateString()}
+                      Last {new Date(activeItem.last_worn).toLocaleDateString()}
                     </span>
                   )}
                 </div>
-                {itemFacts(activeItem).length > 0 && (
+                <div className="im-facts-head">
+                  <span>Details</span>
+                  {editingFacts ? (
+                    <span className="im-facts-actions">
+                      <button className="im-facts-link" onClick={saveFacts} disabled={factBusy}>
+                        {factBusy ? "Saving…" : "Save"}
+                      </button>
+                      <button className="im-facts-link" onClick={() => setEditingFacts(false)}>
+                        Cancel
+                      </button>
+                    </span>
+                  ) : (
+                    <button className="im-facts-link" onClick={startFactEdit}>Edit</button>
+                  )}
+                </div>
+
+                {editingFacts ? (
+                  <dl className="im-facts im-facts--editing">
+                    {FACT_FIELDS.map(([label, key]) => (
+                      <div className="im-fact" key={key}>
+                        <dt>{label}</dt>
+                        <dd>
+                          <input
+                            className="im-fact-input"
+                            value={factDraft[key] ?? ""}
+                            placeholder={key === "formality_score" ? "1–10" : "—"}
+                            onChange={(e) => setFactDraft((d) => ({ ...d, [key]: e.target.value }))}
+                          />
+                        </dd>
+                      </div>
+                    ))}
+                  </dl>
+                ) : itemFacts(activeItem).length > 0 ? (
                   <dl className="im-facts">
-                    {itemFacts(activeItem).map(([k, v]) => (
-                      <div className="im-fact" key={k}>
+                    {itemFacts(activeItem).map(([k, key, v]) => (
+                      <div className="im-fact" key={key}>
                         <dt>{k}</dt>
                         <dd>{v}</dd>
                       </div>
                     ))}
                   </dl>
+                ) : (
+                  <p className="im-facts-empty">Nothing recorded yet.</p>
                 )}
                 {itemKeywords(activeItem).length > 0 && (
                   <div className="im-keywords">

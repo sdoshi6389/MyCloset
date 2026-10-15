@@ -447,6 +447,61 @@ def confirm_upload():
     return jsonify({"message": "Processing started"}), 200
 
 
+# What GPT guessed is a starting point, not a verdict, so every attribute it
+# fills in can be corrected. Only these columns -- nothing that would let a
+# request rewrite an icon path, an embedding or someone's ownership of a row.
+EDITABLE_FIELDS = {
+    "matched_title", "brand", "size", "category", "subcategory", "type",
+    "color", "fabric", "layering_role", "season", "style", "occasion",
+    "vibe", "keywords", "formality_score",
+}
+
+
+@closet_bp.route("/closet/item/<int:item_id>/fields", methods=["POST"])
+def update_item_fields(item_id: int):
+    """Correct any of an item's attributes."""
+    user_id = get_user_id_from_token(request)
+    if not user_id:
+        return jsonify({"message": "Unauthorized"}), 401
+
+    data = request.get_json(silent=True) or {}
+    patch = {}
+    for key, value in data.items():
+        if key not in EDITABLE_FIELDS:
+            continue
+        if key == "formality_score":
+            try:
+                n = int(value)
+                patch[key] = n if 1 <= n <= 10 else None
+            except (TypeError, ValueError):
+                patch[key] = None
+            continue
+        if key == "brand":
+            from garment_text import clean_brand
+            text = str(value or "").strip()
+            # A brand typed by hand is taken as given; only the shape is tidied.
+            patch[key] = clean_brand(text) or (text or None)
+            continue
+        if key == "size":
+            from garment_text import normalise_size
+            text = str(value or "").strip()
+            patch[key] = (normalise_size(text) or text or None)
+            continue
+        text = str(value or "").strip()
+        patch[key] = text or None
+    if not patch:
+        return jsonify({"message": "Nothing to change"}), 400
+
+    supa = get_supa()
+    supa.table("closet_items").update(patch) \
+        .eq("id", item_id).eq("user_id", user_id).execute()
+    row = (supa.table("closet_items").select(_ITEM_SELECT)
+           .eq("id", item_id).eq("user_id", user_id).limit(1).execute().data)
+    if not row:
+        return jsonify({"message": "Not found"}), 404
+    return jsonify({"message": "Saved", "item": _serialize_item(row[0], user_id)}), 200
+
+
 @closet_bp.route("/closet/bulk_update", methods=["POST"])
 def bulk_update():
     """Apply the same few fields to a set of items.
