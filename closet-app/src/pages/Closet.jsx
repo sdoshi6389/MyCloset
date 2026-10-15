@@ -31,6 +31,16 @@ const byWardrobeOrder = (a, b) => {
 /* The attributes worth reading at a glance. These were buried in a hover
    popover that covered the next card along; the modal has room for them and is
    where someone goes when they actually want the detail. */
+/* Cents in, dollars out. Prices are stored as integers because a float cannot
+   hold 19.99 exactly and a closet total is a sum of hundreds of them. */
+const money = (cents) => (cents === null || cents === undefined
+  ? null
+  : `$${(cents / 100).toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`);
+
+const moneyShort = (cents) => (cents === null || cents === undefined
+  ? "—"
+  : `$${Math.round(cents / 100).toLocaleString("en-US")}`);
+
 const factClean = (v) => (typeof v === "string"
   ? v.replace(/[\[\]'"]/g, "").replace(/_/g, " ").trim()
   : Array.isArray(v) ? v.join(", ") : v);
@@ -38,6 +48,9 @@ const factClean = (v) => (typeof v === "string"
 /* Each fact names the column it came from, so the same list can be read or
    corrected. What GPT guessed is a starting point, not a verdict. */
 const FACT_FIELDS = [
+  ["Price",     "price_cents"],
+  ["Bought",    "purchased_on"],
+  ["From",      "retailer"],
   ["Type",      "subcategory"],
   ["Category",  "category"],
   ["Colour",    "color"],
@@ -56,6 +69,13 @@ function itemFacts(item) {
     .map(([label, key]) => {
       if (key === "formality_score") {
         return [label, key, item.formality_score ? `${item.formality_score}/10` : null];
+      }
+      if (key === "price_cents") {
+        const base = money(item.price_cents);
+        // A price on its own is a number; next to what it cost per wear it is
+        // a judgement, which is the point of recording it.
+        const per = money(item.cost_per_wear_cents);
+        return [label, key, base ? (per ? `${base}  ·  ${per}/wear` : base) : null];
       }
       if (key === "subcategory") return [label, key, factClean(item.subcategory || item.type)];
       return [label, key, factClean(item[key])];
@@ -89,6 +109,7 @@ function Closet() {
   const [brandInput, setBrandInput] = useState("");
   const [sizeInput, setSizeInput] = useState("");
   const [categoryInput, setCategoryInput] = useState("");
+  const [closetValue, setClosetValue] = useState(null);
   const [itemHistory, setItemHistory] = useState(null);
   const [editingFacts, setEditingFacts] = useState(false);
   const [factDraft, setFactDraft] = useState({});
@@ -132,9 +153,16 @@ function Closet() {
   const currentEmail = localStorage.getItem("userEmail") || "";
   const { activeCircle, setActiveCircle } = useCircle();
 
+  const fetchValue = () => {
+    axios.get(`${API}/closet/value`, { headers: authHeaders() })
+      .then((r) => setClosetValue(r.data))
+      .catch(() => { /* the page works without it */ });
+  };
+
   useEffect(() => {
     fetchItems();
     fetchCategories();
+    fetchValue();
   }, [activeCircle]);
 
   // Stop brand poll and camera stream on unmount
@@ -679,9 +707,14 @@ function Closet() {
   const startFactEdit = () => {
     const d = {};
     for (const [, key] of FACT_FIELDS) {
-      d[key] = key === "formality_score"
-        ? (activeItem?.formality_score ?? "")
-        : (factClean(activeItem?.[key]) ?? "");
+      if (key === "price_cents") {
+        d[key] = activeItem?.price_cents != null
+          ? (activeItem.price_cents / 100).toFixed(2) : "";
+      } else if (key === "formality_score") {
+        d[key] = activeItem?.formality_score ?? "";
+      } else {
+        d[key] = factClean(activeItem?.[key]) ?? "";
+      }
     }
     // Type falls back to the free-form column when there is no subcategory.
     if (!d.subcategory) d.subcategory = factClean(activeItem?.type) || "";
@@ -699,6 +732,7 @@ function Closet() {
       if (data.item) {
         setItems((prev) => prev.map((i) => (i.id === data.item.id ? { ...i, ...data.item } : i)));
         setActiveItem((prev) => ({ ...prev, ...data.item }));
+        fetchValue();
       }
       setEditingFacts(false);
     } catch (e) {
@@ -829,6 +863,17 @@ function Closet() {
 
       {/* ── Category filter tabs ────────────────────────────────────────────── */}
       <div className="closet-cat-tabs">
+        {closetValue && closetValue.priced_items > 0 && (
+          <div className="closet-worth" title={
+            `${closetValue.priced_items} of ${closetValue.items} items have a price`}>
+            <span className="closet-worth-sum">{moneyShort(closetValue.total_cents)}</span>
+            <span className="closet-worth-note">
+              across {closetValue.priced_items} of {closetValue.items}
+              {closetValue.spend_cents?.month
+                ? ` · ${moneyShort(closetValue.spend_cents.month)} this month` : ""}
+            </span>
+          </div>
+        )}
         <div className="closet-search">
           <input
             className="closet-search-input"
@@ -1150,7 +1195,10 @@ function Closet() {
                           <input
                             className="im-fact-input"
                             value={factDraft[key] ?? ""}
-                            placeholder={key === "formality_score" ? "1–10" : "—"}
+                            placeholder={
+                              key === "price_cents" ? "19.99"
+                              : key === "purchased_on" ? "YYYY-MM-DD"
+                              : key === "formality_score" ? "1–10" : "—"}
                             onChange={(e) => setFactDraft((d) => ({ ...d, [key]: e.target.value }))}
                           />
                         </dd>

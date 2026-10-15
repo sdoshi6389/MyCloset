@@ -99,6 +99,10 @@ def _serialize_item(item, user_id):
     item["url"] = f"/static/{user_id}/{item['filename']}"
     item["tag"] = item.get("tag_text")
     item["has_embedding"] = bool(item.pop("vector_embedding", None))
+    # The number that makes a price mean something. An unworn item has not cost
+    # anything per wear yet, so it is left null rather than shown as its price.
+    cents, worn = item.get("price_cents"), item.get("wear_count") or 0
+    item["cost_per_wear_cents"] = round(cents / worn) if cents and worn else None
     return item
 
 
@@ -109,7 +113,8 @@ def get_images():
         return jsonify({"message": "Unauthorized"}), 401
 
     supa = get_supa()
-    result = supa.table("closet_items").select(_ITEM_SELECT).eq("user_id", user_id).order("id").execute()
+    result = _select_items(lambda cols: supa.table("closet_items")
+                           .select(cols).eq("user_id", user_id).order("id").execute())
 
     images = [_serialize_item(item, user_id) for item in result.data]
     return jsonify(images), 200
@@ -256,12 +261,46 @@ _ITEM_SELECT = (
     "fabric, vibe, keywords, vector_embedding, "
     "subcategory, layering_role, occasion, formality_score, "
     # wear tracking (migration 010)
-    "wear_count, in_laundry, last_worn"
+    "wear_count, in_laundry, last_worn, "
+    # what it cost (migration 011)
+    "price_cents, purchased_on, retailer"
 )
 
 # The upsert returns every column; the response carries the same set the
 # listing endpoint sends, so a freshly uploaded card and a reloaded one match.
 _ITEM_COLUMNS = tuple(c.strip() for c in _ITEM_SELECT.split(",") if c.strip())
+
+# Code and schema do not deploy together: a push reaches Railway in seconds and
+# migration 011 is run by hand. Asking for columns that are not there yet would
+# take the whole closet down in the gap, so the pricing columns are dropped from
+# the query until the first successful read proves they exist.
+_PRICING_COLUMNS = ("price_cents", "purchased_on", "retailer")
+_has_pricing = None
+
+
+def _item_select() -> str:
+    if _has_pricing is False:
+        return ", ".join(c for c in _ITEM_COLUMNS if c not in _PRICING_COLUMNS)
+    return _ITEM_SELECT
+
+
+def _select_items(query_fn):
+    """Run a closet_items read, retrying without the pricing columns once.
+
+    query_fn takes a column list and returns the executed result.
+    """
+    global _has_pricing
+    try:
+        res = query_fn(_item_select())
+        if _has_pricing is None:
+            _has_pricing = True
+        return res
+    except Exception as e:
+        if _has_pricing is False or "price_cents" not in str(e):
+            raise
+        print("ℹ️  pricing columns absent — run migration 011; serving without them")
+        _has_pricing = False
+        return query_fn(_item_select())
 
 
 # How alike two photos have to be before the upload stops to ask.
@@ -381,7 +420,7 @@ def upload_images():
             continue
 
         uploaded_items.append(
-            _serialize_item({k: row.get(k) for k in _ITEM_COLUMNS}, user_id))
+            _serialize_item({k: row.get(k) for k in _ITEM_COLUMNS if k in row}, user_id))
 
         # The embedding is needed either way, and having it here is what makes
         # the duplicate check possible before any of the paid work starts.
@@ -454,7 +493,89 @@ EDITABLE_FIELDS = {
     "matched_title", "brand", "size", "category", "subcategory", "type",
     "color", "fabric", "layering_role", "season", "style", "occasion",
     "vibe", "keywords", "formality_score",
+    "price_cents", "purchased_on", "retailer",
 }
+
+
+def parse_price_cents(value):
+    """Dollars as typed into cents, or None.
+
+    Accepts "19.99", "$19.99", "19", "1,299.50". Stored as an integer because a
+    float cannot hold 19.99 exactly and a closet total is a sum of hundreds.
+    """
+    if value in (None, "", "-"):
+        return None
+    text = re.sub(r"[^0-9.]", "", str(value))
+    if not text or text.count(".") > 1:
+        return None
+    try:
+        return int(round(float(text) * 100))
+    except (TypeError, ValueError):
+        return None
+
+
+@closet_bp.route("/closet/value", methods=["GET"])
+def closet_value():
+    """What the closet is worth, and what has been spent over a period.
+
+    The first half of a wrapped: a total is only honest if it says how much of
+    the closet it covers, so the count of priced items travels with it rather
+    than letting a figure built from nine items read as the whole wardrobe.
+    """
+    user_id = get_user_id_from_token(request)
+    if not user_id:
+        return jsonify({"message": "Unauthorized"}), 401
+
+    try:
+        rows = (get_supa().table("closet_items")
+                .select("price_cents, purchased_on, wear_count, retailer")
+                .eq("user_id", user_id).execute().data) or []
+    except Exception as e:
+        if "price_cents" not in str(e):
+            raise
+        return jsonify({"items": 0, "priced_items": 0, "total_cents": 0,
+                        "spend_cents": {}, "by_month": {},
+                        "avg_cost_per_wear_cents": None, "unpriced_items": 0,
+                        "pending_migration": True}), 200
+
+    priced = [r for r in rows if r.get("price_cents")]
+    total = sum(r["price_cents"] for r in priced)
+
+    from collections import defaultdict
+    from datetime import date, timedelta
+    today = date.today()
+    spans = {
+        "week":  today - timedelta(days=7),
+        "month": today - timedelta(days=30),
+        "year":  today - timedelta(days=365),
+    }
+    spend = {k: 0 for k in spans}
+    by_month = defaultdict(int)
+    for r in priced:
+        on = r.get("purchased_on")
+        if not on:
+            continue
+        try:
+            d = date.fromisoformat(str(on)[:10])
+        except ValueError:
+            continue
+        for k, since in spans.items():
+            if d >= since:
+                spend[k] += r["price_cents"]
+        by_month[d.strftime("%Y-%m")] += r["price_cents"]
+
+    worn = [r for r in priced if (r.get("wear_count") or 0) > 0]
+    cpw = (sum(r["price_cents"] / r["wear_count"] for r in worn) / len(worn)) if worn else None
+
+    return jsonify({
+        "items": len(rows),
+        "priced_items": len(priced),
+        "total_cents": total,
+        "spend_cents": spend,
+        "by_month": dict(sorted(by_month.items())[-12:]),
+        "avg_cost_per_wear_cents": round(cpw) if cpw else None,
+        "unpriced_items": len(rows) - len(priced),
+    }), 200
 
 
 @closet_bp.route("/closet/item/<int:item_id>/fields", methods=["POST"])
@@ -487,6 +608,15 @@ def update_item_fields(item_id: int):
             text = str(value or "").strip()
             patch[key] = (normalise_size(text) or text or None)
             continue
+        if key == "price_cents":
+            patch[key] = parse_price_cents(value)
+            continue
+        if key == "purchased_on":
+            text = str(value or "").strip()
+            # A date the database will not take should clear the field rather
+            # than fail the whole edit.
+            patch[key] = text if re.fullmatch(r"\d{4}-\d{2}-\d{2}", text) else None
+            continue
         text = str(value or "").strip()
         patch[key] = text or None
     if not patch:
@@ -495,8 +625,8 @@ def update_item_fields(item_id: int):
     supa = get_supa()
     supa.table("closet_items").update(patch) \
         .eq("id", item_id).eq("user_id", user_id).execute()
-    row = (supa.table("closet_items").select(_ITEM_SELECT)
-           .eq("id", item_id).eq("user_id", user_id).limit(1).execute().data)
+    row = _select_items(lambda cols: supa.table("closet_items").select(cols)
+                        .eq("id", item_id).eq("user_id", user_id).limit(1).execute()).data
     if not row:
         return jsonify({"message": "Not found"}), 404
     return jsonify({"message": "Saved", "item": _serialize_item(row[0], user_id)}), 200
@@ -540,8 +670,8 @@ def bulk_update():
 
     supa = get_supa()
     supa.table("closet_items").update(patch).eq("user_id", user_id).in_("id", ids).execute()
-    rows = (supa.table("closet_items").select(_ITEM_SELECT)
-            .eq("user_id", user_id).in_("id", ids).execute().data) or []
+    rows = _select_items(lambda cols: supa.table("closet_items").select(cols)
+                         .eq("user_id", user_id).in_("id", ids).execute()).data or []
     return jsonify({
         "message": f"Updated {len(rows)} item(s)",
         "items": [_serialize_item(r, user_id) for r in rows],
@@ -628,7 +758,7 @@ def add_from_catalog():
 
     return jsonify({
         "message": "Added to your closet",
-        "item": _serialize_item({k: row.get(k) for k in _ITEM_COLUMNS}, user_id),
+        "item": _serialize_item({k: row.get(k) for k in _ITEM_COLUMNS if k in row}, user_id),
     }), 200
 
 

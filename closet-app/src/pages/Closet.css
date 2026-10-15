@@ -1028,3 +1028,27 @@
 }
 .im-wear-btn:hover:not(:disabled) { background: var(--accent, #a78bfa); color: #15121f; }
 .im-wear-btn:disabled { opacity: 0.3; cursor: default; }
+
+/* ── What the closet is worth ─────────────────────────────────────────────
+   A total is only honest if it says how much of the closet it covers, so the
+   count travels with the figure. */
+.closet-worth {
+  display: inline-flex;
+  flex-direction: column;
+  gap: 1px;
+  padding: 4px 14px 4px 0;
+  margin-right: var(--space-2, 8px);
+  border-right: 1px solid rgba(255,255,255,0.09);
+  box-sizing: border-box;
+}
+.closet-worth-sum {
+  font-size: 15px;
+  font-weight: 700;
+  color: var(--text, #fff);
+  line-height: 1.1;
+}
+.closet-worth-note {
+  font-size: 9.5px;
+  color: var(--text-dim, rgba(255,255,255,0.42));
+  white-space: nowrap;
+}
